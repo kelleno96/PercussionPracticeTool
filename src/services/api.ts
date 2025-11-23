@@ -91,8 +91,7 @@ export async function persistSession(session: Session) {
       started_at: new Date(session.startedAt).toISOString(),
       ended_at: session.endedAt ? new Date(session.endedAt).toISOString() : null,
       tempo: session.tempo ?? null,
-      subdivision: session.subdivision ?? null,
-      strokes: session.strokes
+      subdivision: session.subdivision ?? null
     });
     if (error) {
       console.warn("Failed to persist session remotely, saving locally", error.message);
