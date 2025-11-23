@@ -174,7 +174,7 @@ function App() {
     const exercise = exerciseOptions.find((e) => e.id === exerciseId);
     const session: Session = {
       id: crypto.randomUUID(),
-      userId: profile?.id ?? "local",
+      userId: "local",
       exerciseId: exerciseId || "default",
       exerciseName: exercise?.name ?? "General",
       startedAt: Date.now(),
