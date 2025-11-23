@@ -1,0 +1,16 @@
+{
+  "name": "Stroke Counter",
+  "short_name": "Strokes",
+  "display": "standalone",
+  "start_url": "/",
+  "background_color": "#050915",
+  "theme_color": "#3ccfcf",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "128x128",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
