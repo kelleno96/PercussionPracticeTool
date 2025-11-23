@@ -22,6 +22,7 @@ import {
   weeklyTotals
 } from "./analytics";
 import type { LeaderboardEntry, Session, StrokeEvent, UserProfile } from "./types";
+import type { DetectorConfig } from "./hooks/useStrokeDetector";
 
 const formatMs = (ms: number) => {
   const totalSeconds = Math.floor(ms / 1000);
@@ -69,7 +70,7 @@ function App() {
   const [calibrating, setCalibrating] = useState(false);
   const [calibrationHits, setCalibrationHits] = useState<number[]>([]);
   const calibrationTarget = 33;
-  const prevDetectorConfigRef = useRef(config);
+  const prevDetectorConfigRef = useRef<DetectorConfig | null>(null);
 
   const metronome = useMetronome({ tempo: 110, subdivision: 1, volume: 0.6 });
 
@@ -118,6 +119,12 @@ function App() {
       [timeWindowMs]
     )
   );
+
+  useEffect(() => {
+    if (!prevDetectorConfigRef.current) {
+      prevDetectorConfigRef.current = config;
+    }
+  }, [config]);
 
   useEffect(() => {
     document.body.dataset.theme = theme;
@@ -290,7 +297,8 @@ function App() {
     (apply = false) => {
       setCalibrating(false);
       setCalibrationHits([]);
-      updateConfig(prevDetectorConfigRef.current);
+      const prevCfg = prevDetectorConfigRef.current ?? config;
+      updateConfig(prevCfg);
       if (apply) {
         const offset = computeCalibrationOffset(calibrationHits);
         if (offset !== null && !Number.isNaN(offset)) {
@@ -298,7 +306,7 @@ function App() {
         }
       }
     },
-    [calibrationHits, computeCalibrationOffset, updateConfig]
+    [calibrationHits, computeCalibrationOffset, updateConfig, config]
   );
 
   useEffect(() => {
@@ -309,9 +317,10 @@ function App() {
       }
       setCalibrating(false);
       setCalibrationHits([]);
-      updateConfig(prevDetectorConfigRef.current);
+      const prevCfg = prevDetectorConfigRef.current ?? config;
+      updateConfig(prevCfg);
     }
-  }, [calibrating, calibrationHits, calibrationTarget, computeCalibrationOffset, updateConfig]);
+  }, [calibrating, calibrationHits, calibrationTarget, computeCalibrationOffset, updateConfig, config]);
 
   return (
     <div className="app">
