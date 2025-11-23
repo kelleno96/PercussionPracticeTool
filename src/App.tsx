@@ -102,14 +102,15 @@ function App() {
           setCalibrationHits((prev) => (prev.length < calibrationTarget ? [...prev, stroke.at] : prev));
         }
         if (sessionId) {
+          const session = sessions.find((s) => s.id === sessionId);
           setSessions((prev) =>
             prev.map((s) => (s.id === sessionId ? { ...s, strokes: [...s.strokes, stroke] } : s))
           );
-          appendStrokeEvent(sessionId, { ...stroke, exerciseId });
+          appendStrokeEvent(sessionId, { ...stroke, exerciseId }, session?.userId);
           setLiveCount((c) => c + 1);
         }
       },
-      [exerciseId, timeWindowMs, calibrating, metronomeAnchorMs]
+      [exerciseId, timeWindowMs, calibrating, metronomeAnchorMs, sessions]
     ),
     useCallback(
       (telemetry) => {
@@ -233,10 +234,7 @@ function App() {
 
   const [publicLeaderboards, setPublicLeaderboards] = useState<LeaderboardEntry[]>([]);
 
-  const leaderboards = useMemo(
-    () => leaderboardsFromSessions(sessions, profile?.displayName ?? "You", profile?.firstName),
-    [sessions, profile]
-  );
+  const leaderboards = useMemo(() => leaderboardsFromSessions(sessions, profile), [sessions, profile]);
 
   const handleAuth = async () => {
     setAuthing(true);

@@ -1,5 +1,5 @@
 import { differenceInDays, endOfDay, startOfDay, startOfWeek } from "date-fns";
-import type { Session, StrokeEvent } from "./types";
+import type { Session, StrokeEvent, UserProfile } from "./types";
 
 const median = (arr: number[]) => {
   if (!arr.length) return 0;
@@ -79,13 +79,23 @@ export function peakSpm(strokes: StrokeEvent[], windowMs = 60_000) {
   return Math.round(max);
 }
 
-export function leaderboardsFromSessions(
-  sessions: Session[],
-  displayName: string,
-  firstName?: string
-) {
+const shortHash = (input: string) => {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(36).slice(0, 6);
+};
+
+const labelForUser = (profile?: Pick<UserProfile, "id" | "firstName" | "displayName">) => {
+  const base = profile?.firstName || profile?.displayName || "You";
+  const tagSource = profile?.id || base;
+  return `${base}_${shortHash(tagSource)}`;
+};
+
+export function leaderboardsFromSessions(sessions: Session[], profile?: UserProfile | null) {
   const summary = summarizeSessions(sessions);
-  const name = (firstName ?? displayName ?? "You").split(/\s+/)[0] || "You";
+  const name = labelForUser(profile);
   const entries = [
     {
       id: "lifetime-strokes",

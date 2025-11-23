@@ -38,6 +38,7 @@ export type UserProfile = {
   id: string;
   displayName: string;
   firstName?: string;
+  safeName?: string;
   email?: string;
   photoUrl?: string;
   createdAt?: string;

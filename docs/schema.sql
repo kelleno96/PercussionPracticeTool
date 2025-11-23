@@ -6,6 +6,7 @@ create extension if not exists "uuid-ossp";
 create table if not exists public.profiles (
   id uuid primary key references auth.users on delete cascade,
   display_name text not null,
+  safe_display_name text,
   safe_username text generated always as (regexp_replace(lower(display_name), '[^a-z0-9]+', '-', 'g')) stored,
   photo_url text,
   created_at timestamptz default now()

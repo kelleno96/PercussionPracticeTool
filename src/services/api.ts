@@ -4,12 +4,22 @@ import { appendStroke, loadExercises, loadProfile, loadSessions, saveExercises, 
 
 export type AuthProvider = "google";
 
+const shortHash = (input: string) => {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(36).slice(0, 6);
+};
+
 const firstNameFrom = (name?: string | null) => {
   if (!name) return "Drummer";
   const trimmed = name.trim();
   if (!trimmed) return "Drummer";
   return trimmed.split(/\s+/)[0];
 };
+
+const uniqueName = (firstName: string, id?: string) => `${firstName}_${shortHash(id ?? firstName)}`;
 
 export async function signIn(provider: AuthProvider) {
   if (hasRemoteBackend && supabase) {
@@ -38,16 +48,19 @@ export async function getProfile(): Promise<UserProfile | null> {
     const { data } = await supabase.auth.getUser();
     if (data.user) {
       const displayName = data.user.user_metadata.full_name ?? data.user.email ?? "Drummer";
+      const firstName = firstNameFrom(displayName);
       const profile: UserProfile = {
         id: data.user.id,
         displayName,
-        firstName: firstNameFrom(displayName),
-        email: data.user.email ?? undefined
+        firstName,
+        email: data.user.email ?? undefined,
+        safeName: uniqueName(firstName, data.user.id)
       };
       try {
         await supabase.from("profiles").upsert({
           id: profile.id,
-          display_name: profile.displayName
+          display_name: profile.displayName,
+          safe_display_name: profile.safeName
         });
       } catch (err) {
         console.warn("Profile upsert failed", err);
@@ -57,8 +70,13 @@ export async function getProfile(): Promise<UserProfile | null> {
   }
   const local = loadProfile();
   return local
-    ? { id: "local", displayName: local.displayName, firstName: local.firstName }
-    : { id: "anon", displayName: "Guest drummer", firstName: "Guest" };
+    ? {
+        id: "local",
+        displayName: local.displayName,
+        firstName: local.firstName,
+        safeName: uniqueName(local.firstName ?? local.displayName ?? "Guest", local.displayName)
+      }
+    : { id: "anon", displayName: "Guest drummer", firstName: "Guest", safeName: uniqueName("Guest", "anon") };
 }
 
 export async function persistSession(session: Session) {
@@ -83,11 +101,12 @@ export async function persistSession(session: Session) {
   }
 }
 
-export async function appendStrokeEvent(sessionId: string, stroke: StrokeEvent) {
+export async function appendStrokeEvent(sessionId: string, stroke: StrokeEvent, userId?: string) {
   if (hasRemoteBackend && supabase) {
-    await supabase.from("strokes").insert({
+    const { error } = await supabase.from("strokes").insert({
       id: stroke.id,
       session_id: sessionId,
+      user_id: userId ?? null,
       at: new Date(stroke.at).toISOString(),
       db: stroke.db,
       rms: stroke.rms,
@@ -95,6 +114,9 @@ export async function appendStrokeEvent(sessionId: string, stroke: StrokeEvent) 
       floor_db: stroke.floorDb,
       exercise_id: stroke.exerciseId ?? null
     });
+    if (error) {
+      console.warn("Failed to insert stroke", error.message);
+    }
   } else {
     appendStroke(sessionId, stroke);
   }
@@ -147,12 +169,16 @@ export async function fetchPublicLeaderboards(): Promise<LeaderboardEntry[]> {
       if (error) throw error;
       const payload = (data?.[0]?.payload as any[]) || [];
       const category = data?.[0]?.category ?? "Leaderboard";
-      return payload.map((row, idx) => ({
-        id: `${data?.[0]?.id ?? "lb"}-${idx}`,
-        userName: firstNameFrom(row.display_name ?? row.name ?? row.user ?? "Drummer"),
-        value: row.value ?? row.total ?? 0,
-        label: category
-      }));
+      return payload.map((row, idx) => {
+        const firstName = firstNameFrom(row.display_name ?? row.name ?? row.user ?? "Drummer");
+        const safe = uniqueName(firstName, row.user_id ?? row.id ?? firstName);
+        return {
+          id: `${data?.[0]?.id ?? "lb"}-${idx}`,
+          userName: safe,
+          value: row.value ?? row.total ?? 0,
+          label: category
+        };
+      });
     } catch (err) {
       console.warn("Failed to fetch public leaderboards", err);
     }
