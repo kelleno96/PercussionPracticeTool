@@ -66,6 +66,10 @@ function App() {
     return saved ? Number(saved) || 0 : 0;
   });
   const [showCalibration, setShowCalibration] = useState(false);
+  const [calibrating, setCalibrating] = useState(false);
+  const [calibrationHits, setCalibrationHits] = useState<number[]>([]);
+  const calibrationTarget = 33;
+  const prevDetectorConfigRef = useRef(config);
 
   const metronome = useMetronome({ tempo: 110, subdivision: 1, volume: 0.6 });
 
@@ -73,30 +77,10 @@ function App() {
     currentSessionRef.current = currentSessionId;
   }, [currentSessionId]);
 
-  const ensureSession = useCallback(() => {
-    if (currentSessionRef.current) return currentSessionRef.current;
-    const exercise = exerciseOptions.find((e) => e.id === exerciseId);
-    const session: Session = {
-      id: crypto.randomUUID(),
-      userId: profile?.id ?? "anon",
-      exerciseId: exerciseId || "default",
-      exerciseName: exercise?.name ?? "General",
-      startedAt: Date.now(),
-      strokes: [],
-      tempo: metronome.config.tempo,
-      subdivision: metronome.config.subdivision
-    };
-    setSessions((prev) => [session, ...prev]);
-    setCurrentSessionId(session.id);
-    currentSessionRef.current = session.id;
-    void persistSession(session);
-    return session.id;
-  }, [exerciseId, exerciseOptions, metronome.config.subdivision, metronome.config.tempo, profile?.id]);
-
   const { isRunning, status, levelDb, config, start, stop, updateConfig } = useStrokeDetector(
     useCallback(
       (stroke: StrokeEvent) => {
-        const sessionId = currentSessionRef.current ?? ensureSession();
+        const sessionId = currentSessionRef.current;
         setThresholdDb(stroke.thresholdDb);
         setImpulses((prev) => {
           const now = performance.now();
@@ -106,13 +90,18 @@ function App() {
           ].filter((p) => p.t >= now - timeWindowMs);
           return next;
         });
-        setSessions((prev) =>
-          prev.map((s) => (s.id === sessionId ? { ...s, strokes: [...s.strokes, stroke] } : s))
-        );
-        appendStrokeEvent(sessionId, { ...stroke, exerciseId });
-        setLiveCount((c) => c + 1);
+        if (calibrating && metronomeAnchorMs) {
+          setCalibrationHits((prev) => (prev.length < calibrationTarget ? [...prev, stroke.at] : prev));
+        }
+        if (sessionId) {
+          setSessions((prev) =>
+            prev.map((s) => (s.id === sessionId ? { ...s, strokes: [...s.strokes, stroke] } : s))
+          );
+          appendStrokeEvent(sessionId, { ...stroke, exerciseId });
+          setLiveCount((c) => c + 1);
+        }
       },
-      [exerciseId, timeWindowMs, ensureSession]
+      [exerciseId, timeWindowMs, calibrating, metronomeAnchorMs]
     ),
     useCallback(
       (telemetry) => {
@@ -129,12 +118,6 @@ function App() {
       [timeWindowMs]
     )
   );
-
-  useEffect(() => {
-    if (isRunning && !currentSessionRef.current) {
-      ensureSession();
-    }
-  }, [ensureSession, isRunning]);
 
   useEffect(() => {
     document.body.dataset.theme = theme;
@@ -185,7 +168,22 @@ function App() {
 
   const startSession = async () => {
     if (currentSessionRef.current) return;
-    ensureSession();
+    const exercise = exerciseOptions.find((e) => e.id === exerciseId);
+    const session: Session = {
+      id: crypto.randomUUID(),
+      userId: profile?.id ?? "anon",
+      exerciseId: exerciseId || "default",
+      exerciseName: exercise?.name ?? "General",
+      startedAt: Date.now(),
+      strokes: [],
+      tempo: metronome.config.tempo,
+      subdivision: metronome.config.subdivision
+    };
+    setSessions((prev) => [session, ...prev]);
+    setCurrentSessionId(session.id);
+    currentSessionRef.current = session.id;
+    setLiveCount(0);
+    await persistSession(session);
   };
 
   const stopSession = async () => {
@@ -207,7 +205,6 @@ function App() {
       stop();
     } else {
       await start();
-      if (!currentSessionRef.current) ensureSession();
     }
   };
 
@@ -259,6 +256,62 @@ function App() {
   };
 
   const effectiveLeaderboards = publicLeaderboards.length ? publicLeaderboards : leaderboards;
+
+  const computeCalibrationOffset = useCallback(
+    (hits: number[]) => {
+      if (!metronomeAnchorMs) return null;
+      const intervalMs = 60000 / (metronome.config.tempo * metronome.config.subdivision);
+      if (!intervalMs) return null;
+      const offsets = hits.map((hit) => {
+        const k = Math.round((hit - metronomeAnchorMs) / intervalMs);
+        const tick = metronomeAnchorMs + k * intervalMs;
+        return hit - tick;
+      });
+      const avg = offsets.reduce((a, b) => a + b, 0) / offsets.length;
+      return Math.round(avg);
+    },
+    [metronomeAnchorMs, metronome.config.subdivision, metronome.config.tempo]
+  );
+
+  const startCalibration = async () => {
+    setCalibrationHits([]);
+    setCalibrating(true);
+    prevDetectorConfigRef.current = config;
+    updateConfig({ sensitivity: Math.max(1.6, config.sensitivity), debounceMs: 40 });
+    if (!metronome.isRunning) {
+      setMetronomeAnchorMs(performance.now());
+      await metronome.start();
+    } else if (!metronomeAnchorMs) {
+      setMetronomeAnchorMs(performance.now());
+    }
+  };
+
+  const stopCalibration = useCallback(
+    (apply = false) => {
+      setCalibrating(false);
+      setCalibrationHits([]);
+      updateConfig(prevDetectorConfigRef.current);
+      if (apply) {
+        const offset = computeCalibrationOffset(calibrationHits);
+        if (offset !== null && !Number.isNaN(offset)) {
+          setAvOffsetMs(offset);
+        }
+      }
+    },
+    [calibrationHits, computeCalibrationOffset, updateConfig]
+  );
+
+  useEffect(() => {
+    if (calibrating && calibrationHits.length >= calibrationTarget) {
+      const offset = computeCalibrationOffset(calibrationHits);
+      if (offset !== null && !Number.isNaN(offset)) {
+        setAvOffsetMs(offset);
+      }
+      setCalibrating(false);
+      setCalibrationHits([]);
+      updateConfig(prevDetectorConfigRef.current);
+    }
+  }, [calibrating, calibrationHits, calibrationTarget, computeCalibrationOffset, updateConfig]);
 
   return (
     <div className="app">
@@ -587,16 +640,48 @@ function App() {
             </p>
             <ol className="modal-steps">
               <li>Start the metronome. Watch the impulse graph lines and listen to clicks.</li>
-              <li>
-                Adjust the offset slider below until the metronome click lands exactly when a grid
-                line passes the current time marker.
-              </li>
+              <li>Use auto-calibration or adjust the manual slider until clicks align with lines.</li>
               <li>Use headphones if possible to avoid room latency.</li>
               <li>When it feels right, close this dialog. Offset stays applied.</li>
             </ol>
+            <div className="panel" style={{ background: "rgba(255,255,255,0.02)" }}>
+              <h4>Auto-calibrate</h4>
+              <p className="subtitle">
+                We’ll listen for {calibrationTarget} strokes (sensitivity 1.6+, debounce 40ms) while
+                the metronome runs, then compute the latency automatically.
+              </p>
+              <div className="controls-row">
+                <button onClick={startCalibration} disabled={calibrating}>
+                  {calibrating ? "Calibrating…" : "Start auto-calibration"}
+                </button>
+                {calibrating && (
+                  <button className="theme-toggle" onClick={() => stopCalibration(false)}>
+                    Cancel
+                  </button>
+                )}
+              </div>
+              {calibrating && (
+                <div style={{ marginTop: 8 }}>
+                  <div className="meter">
+                    <div
+                      className="meter-fill"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.round((calibrationHits.length / calibrationTarget) * 100)
+                        )}%`
+                      }}
+                    />
+                  </div>
+                  <p className="subtitle">
+                    Captured {calibrationHits.length} / {calibrationTarget} strokes…
+                  </p>
+                </div>
+              )}
+            </div>
             <div className="controls-row" style={{ marginTop: 8 }}>
               <label style={{ flex: 1 }}>
-                AV offset (ms)
+                Manual offset (ms)
                 <input
                   type="range"
                   min={-600}
