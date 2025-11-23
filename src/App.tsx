@@ -71,6 +71,7 @@ function App() {
   const [calibrationHits, setCalibrationHits] = useState<number[]>([]);
   const calibrationTarget = 33;
   const prevDetectorConfigRef = useRef<DetectorConfig | null>(null);
+  const displayDbRef = useRef(-90);
 
   const metronome = useMetronome({ tempo: 110, subdivision: 1, volume: 0.6 });
 
@@ -83,15 +84,21 @@ function App() {
       (stroke: StrokeEvent) => {
         const sessionId = currentSessionRef.current;
         setThresholdDb(stroke.thresholdDb);
+        displayDbRef.current = 0.7 * displayDbRef.current + 0.3 * stroke.db;
         setImpulses((prev) => {
           const now = performance.now();
           const next = [
             ...prev,
-            { t: now, amplitude: stroke.db, isHit: true, thresholdDb: stroke.thresholdDb }
+            {
+              t: now,
+              amplitude: displayDbRef.current,
+              isHit: true,
+              thresholdDb: stroke.thresholdDb
+            }
           ].filter((p) => p.t >= now - timeWindowMs);
           return next;
         });
-        if (calibrating && metronomeAnchorMs) {
+        if (calibrating) {
           setCalibrationHits((prev) => (prev.length < calibrationTarget ? [...prev, stroke.at] : prev));
         }
         if (sessionId) {
@@ -107,11 +114,12 @@ function App() {
     useCallback(
       (telemetry) => {
         setThresholdDb(telemetry.thresholdDb);
+        displayDbRef.current = 0.85 * displayDbRef.current + 0.15 * telemetry.db;
         setImpulses((prev) => {
           const now = performance.now();
           const next = [
             ...prev,
-            { t: now, amplitude: telemetry.db, thresholdDb: telemetry.thresholdDb }
+            { t: now, amplitude: displayDbRef.current, thresholdDb: telemetry.thresholdDb }
           ].filter((p) => p.t >= now - timeWindowMs);
           return next;
         });
@@ -283,7 +291,7 @@ function App() {
   const startCalibration = async () => {
     setCalibrationHits([]);
     setCalibrating(true);
-    prevDetectorConfigRef.current = config;
+    prevDetectorConfigRef.current = { ...config };
     updateConfig({ sensitivity: Math.max(1.6, config.sensitivity), debounceMs: 40 });
     if (!metronome.isRunning) {
       setMetronomeAnchorMs(performance.now());
