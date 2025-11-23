@@ -311,7 +311,7 @@ function App() {
       </div>
 
       <div className="grid">
-        <div className="panel">
+        <div className={`panel ${currentSessionId ? "recording" : ""}`}>
           <h2>Session</h2>
           <div className="controls-row">
             <select
@@ -334,7 +334,8 @@ function App() {
             <button onClick={stopSession} disabled={!currentSessionId}>
               End session
             </button>
-            <span className="badge">
+            <span className="recording-pill" aria-live="polite">
+              <span className="pulse" aria-hidden="true" />
               {currentSessionId ? "Recording" : "Idle"} · {status}
             </span>
           </div>
