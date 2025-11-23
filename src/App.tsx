@@ -53,7 +53,7 @@ function App() {
   const [exerciseId, setExerciseId] = useState<string>("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [impulses, setImpulses] = useState<ImpulsePoint[]>([]);
-  const [timeWindowMs, setTimeWindowMs] = useState(12000);
+  const [timeWindowMs, setTimeWindowMs] = useState(5000);
   const [logging, setLogging] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [thresholdDb, setThresholdDb] = useState(-40);
