@@ -60,11 +60,21 @@ export async function getProfile(): Promise<UserProfile | null> {
         safeName: uniqueName(firstName, data.user.id)
       };
       try {
-        await supabase.from("profiles").upsert({
+        const payload = {
           id: profile.id,
           display_name: profile.displayName,
           safe_display_name: profile.safeName
-        });
+        };
+        const { error } = await supabase.from("profiles").upsert(payload);
+        if (error && error.code === "PGRST204") {
+          // fallback if column not yet created
+          await supabase.from("profiles").upsert({
+            id: profile.id,
+            display_name: profile.displayName
+          });
+        } else if (error) {
+          throw error;
+        }
       } catch (err) {
         console.warn("Profile upsert failed", err);
       }
