@@ -21,6 +21,9 @@ const firstNameFrom = (name?: string | null) => {
 
 const uniqueName = (firstName: string, id?: string) => `${firstName}_${shortHash(id ?? firstName)}`;
 
+const isUuid = (value: string | null | undefined) =>
+  typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
 export async function signIn(provider: AuthProvider) {
   if (hasRemoteBackend && supabase) {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -86,7 +89,7 @@ export async function persistSession(session: Session) {
     const { error } = await supabase.from("sessions").upsert({
       id: session.id,
       user_id: session.userId,
-      exercise_id: session.exerciseId,
+      exercise_id: isUuid(session.exerciseId) ? session.exerciseId : null,
       exercise_name: session.exerciseName,
       started_at: new Date(session.startedAt).toISOString(),
       ended_at: session.endedAt ? new Date(session.endedAt).toISOString() : null,
@@ -123,7 +126,7 @@ export async function appendStrokeEvent(sessionId: string, stroke: StrokeEvent, 
       rms: stroke.rms,
       threshold_db: stroke.thresholdDb,
       floor_db: stroke.floorDb,
-      exercise_id: stroke.exerciseId ?? null
+      exercise_id: isUuid(stroke.exerciseId) ? stroke.exerciseId : null
     });
     if (error) {
       console.warn("Failed to insert stroke", error.message);
