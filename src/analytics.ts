@@ -94,32 +94,6 @@ const labelForUser = (profile?: Pick<UserProfile, "id" | "firstName" | "displayN
   return `${base}_${shortHash(tagSource)}`;
 };
 
-export function leaderboardsFromSessions(sessions: Session[], profile?: UserProfile | null) {
-  const summary = summarizeSessions(sessions);
-  const name = labelForUser(profile);
-  const entries = [
-    {
-      id: "lifetime-strokes",
-      userName: name,
-      value: summary.totalStrokes,
-      label: "Lifetime strokes"
-    },
-    {
-      id: "sessions",
-      userName: name,
-      value: summary.sessionCount,
-      label: "Sessions"
-    },
-    {
-      id: "longest",
-      userName: name,
-      value: Math.round(summary.medianSessionDuration / 1000),
-      label: "Median session seconds"
-    }
-  ];
-  return entries;
-}
-
 export function weeklyTotals(sessions: Session[]) {
   const start = startOfWeek(new Date(), { weekStartsOn: 1 }).getTime();
   return sessions

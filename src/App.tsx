@@ -2,26 +2,16 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from "react"
 import { ImpulseGraph, type ImpulsePoint } from "./components/ImpulseGraph";
 import { useStrokeDetector } from "./hooks/useStrokeDetector";
 import { useMetronome } from "./hooks/useMetronome";
-import {
-  addExercise,
-  appendStrokeEvent,
-  fetchPublicLeaderboards,
-  getProfile,
-  listExercises,
-  listSessions,
-  persistSession
-} from "./services/api";
-import { signIn, signOut } from "./services/api";
+import { addExercise, appendStrokeEvent, listExercises, listSessions, persistSession } from "./services/api";
 import {
   aggregateExerciseTotals,
-  leaderboardsFromSessions,
   peakSpm,
   strokesByPeriod,
   streakDays,
   summarizeSessions,
   weeklyTotals
 } from "./analytics";
-import type { LeaderboardEntry, Session, StrokeEvent, UserProfile } from "./types";
+import type { Session, StrokeEvent } from "./types";
 import type { DetectorConfig } from "./hooks/useStrokeDetector";
 
 const formatMs = (ms: number) => {
@@ -47,7 +37,6 @@ const writeCookie = (name: string, value: string, days = 180) => {
 };
 
 function App() {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [exerciseOptions, setExerciseOptions] = useState<{ id: string; name: string }[]>([]);
   const [exerciseId, setExerciseId] = useState<string>("");
@@ -58,7 +47,6 @@ function App() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [thresholdDb, setThresholdDb] = useState(-40);
   const [liveCount, setLiveCount] = useState(0);
-  const [authing, setAuthing] = useState(false);
   const currentSessionRef = useRef<string | null>(null);
   const autoStartedMicRef = useRef(false);
   const [metronomeAnchorMs, setMetronomeAnchorMs] = useState<number | null>(null);
@@ -144,27 +132,11 @@ function App() {
 
   useEffect(() => {
     (async () => {
-      const loadedProfile = await getProfile();
-      setProfile(loadedProfile);
+      const loadedSessions = await listSessions();
+      setSessions(loadedSessions);
       const exercises = listExercises();
       setExerciseOptions(exercises);
       setExerciseId(exercises[0]?.id ?? "");
-    })();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      const loadedSessions = await listSessions();
-      setSessions(loadedSessions);
-    })();
-  }, [profile?.id]);
-
-  useEffect(() => {
-    (async () => {
-      const remote = await fetchPublicLeaderboards();
-      if (remote.length) {
-        setPublicLeaderboards(remote);
-      }
     })();
   }, []);
 
@@ -236,31 +208,6 @@ function App() {
     setExerciseId(ex.id);
   };
 
-  const [publicLeaderboards, setPublicLeaderboards] = useState<LeaderboardEntry[]>([]);
-
-  const leaderboards = useMemo(() => leaderboardsFromSessions(sessions, profile), [sessions, profile]);
-
-  const handleAuth = async () => {
-    setAuthing(true);
-    try {
-      await signIn("google");
-      const refreshed = await getProfile();
-      setProfile(refreshed);
-    } finally {
-      setAuthing(false);
-    }
-  };
-
-  const handleSignOut = async () => {
-    setAuthing(true);
-    try {
-      await signOut();
-      const refreshed = await getProfile();
-      setProfile(refreshed);
-    } finally {
-      setAuthing(false);
-    }
-  };
 
   const toggleMetronome = async () => {
     if (metronome.isRunning) {
@@ -272,7 +219,6 @@ function App() {
     await metronome.start();
   };
 
-  const effectiveLeaderboards = publicLeaderboards.length ? publicLeaderboards : leaderboards;
 
   const computeCalibrationOffset = useCallback(
     (hits: number[]) => {
@@ -342,19 +288,12 @@ function App() {
           </p>
         </div>
         <div className="controls-row">
-          <span className="badge">{profile?.firstName ?? profile?.displayName ?? "Guest"}</span>
           <button
             className="theme-toggle"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             aria-label="Toggle theme"
           >
             {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
-          </button>
-          <button onClick={handleAuth} disabled={authing}>
-            Google
-          </button>
-          <button onClick={handleSignOut} disabled={authing}>
-            Sign out
           </button>
           <button onClick={toggleMic}>{isRunning ? "Stop microphone" : "Start microphone"}</button>
         </div>
@@ -592,20 +531,7 @@ function App() {
       </div>
 
       <div className="panel">
-        <h3>Leaderboards</h3>
-        <p className="subtitle">Public-safe first names only. Remote data when available.</p>
-        <div className="grid">
-          {effectiveLeaderboards.map((entry) => (
-            <div className="panel" key={entry.id}>
-              <h4>{entry.label}</h4>
-              <div className="stat">
-                <span>{entry.userName}</span>
-                <strong>{formatNumber(entry.value)}</strong>
-              </div>
-            </div>
-          ))}
-        </div>
-        <h4>Per-exercise leaders</h4>
+        <h3>Per-exercise totals (local)</h3>
         <div className="grid">
           {exerciseTotals.map((ex) => (
             <div className="panel" key={ex.exerciseId}>
@@ -613,7 +539,6 @@ function App() {
                 <span>{ex.exerciseName}</span>
                 <strong>{formatNumber(ex.strokes)}</strong>
               </div>
-              <p className="subtitle">Local exercise totals (private to you).</p>
             </div>
           ))}
         </div>
