@@ -40,12 +40,12 @@ export function saveExercises(exercises: { id: string; name: string }[]) {
   write(EXERCISES_KEY, exercises);
 }
 
-export function saveProfile(profile: { displayName: string }) {
+export function saveProfile(profile: { displayName: string; firstName?: string }) {
   write(PROFILE_KEY, profile);
 }
 
 export function loadProfile() {
-  return read<{ displayName: string } | null>(PROFILE_KEY, null);
+  return read<{ displayName: string; firstName?: string } | null>(PROFILE_KEY, null);
 }
 
 export function appendStroke(sessionId: string, stroke: StrokeEvent) {

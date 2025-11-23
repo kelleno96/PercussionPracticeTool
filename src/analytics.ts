@@ -79,24 +79,29 @@ export function peakSpm(strokes: StrokeEvent[], windowMs = 60_000) {
   return Math.round(max);
 }
 
-export function leaderboardsFromSessions(sessions: Session[], displayName: string) {
+export function leaderboardsFromSessions(
+  sessions: Session[],
+  displayName: string,
+  firstName?: string
+) {
   const summary = summarizeSessions(sessions);
+  const name = (firstName ?? displayName ?? "You").split(/\s+/)[0] || "You";
   const entries = [
     {
       id: "lifetime-strokes",
-      userName: displayName,
+      userName: name,
       value: summary.totalStrokes,
       label: "Lifetime strokes"
     },
     {
       id: "sessions",
-      userName: displayName,
+      userName: name,
       value: summary.sessionCount,
       label: "Sessions"
     },
     {
       id: "longest",
-      userName: displayName,
+      userName: name,
       value: Math.round(summary.medianSessionDuration / 1000),
       label: "Median session seconds"
     }

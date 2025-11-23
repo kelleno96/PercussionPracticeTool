@@ -5,6 +5,7 @@ import { useMetronome } from "./hooks/useMetronome";
 import {
   addExercise,
   appendStrokeEvent,
+  fetchPublicLeaderboards,
   getProfile,
   listExercises,
   listSessions,
@@ -20,7 +21,7 @@ import {
   summarizeSessions,
   weeklyTotals
 } from "./analytics";
-import type { Session, StrokeEvent, UserProfile } from "./types";
+import type { LeaderboardEntry, Session, StrokeEvent, UserProfile } from "./types";
 
 const formatMs = (ms: number) => {
   const totalSeconds = Math.floor(ms / 1000);
@@ -156,6 +157,15 @@ function App() {
   }, []);
 
   useEffect(() => {
+    (async () => {
+      const remote = await fetchPublicLeaderboards();
+      if (remote.length) {
+        setPublicLeaderboards(remote);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     if (!isRunning && !autoStartedMicRef.current) {
       autoStartedMicRef.current = true;
       start().catch((err) => console.warn("Auto mic start failed", err));
@@ -209,15 +219,17 @@ function App() {
     setExerciseId(ex.id);
   };
 
+  const [publicLeaderboards, setPublicLeaderboards] = useState<LeaderboardEntry[]>([]);
+
   const leaderboards = useMemo(
-    () => leaderboardsFromSessions(sessions, profile?.displayName ?? "You"),
+    () => leaderboardsFromSessions(sessions, profile?.displayName ?? "You", profile?.firstName),
     [sessions, profile]
   );
 
-  const handleAuth = async (provider: "google" | "apple") => {
+  const handleAuth = async () => {
     setAuthing(true);
     try {
-      await signIn(provider);
+      await signIn("google");
       const refreshed = await getProfile();
       setProfile(refreshed);
     } finally {
@@ -246,6 +258,8 @@ function App() {
     await metronome.start();
   };
 
+  const effectiveLeaderboards = publicLeaderboards.length ? publicLeaderboards : leaderboards;
+
   return (
     <div className="app">
       <div className="hero">
@@ -256,7 +270,7 @@ function App() {
           </p>
         </div>
         <div className="controls-row">
-          <span className="badge">{profile?.displayName ?? "Guest"}</span>
+          <span className="badge">{profile?.firstName ?? profile?.displayName ?? "Guest"}</span>
           <button
             className="theme-toggle"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -264,7 +278,7 @@ function App() {
           >
             {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
           </button>
-          <button onClick={() => handleAuth("google")} disabled={authing}>
+          <button onClick={handleAuth} disabled={authing}>
             Google
           </button>
           <button onClick={handleSignOut} disabled={authing}>
@@ -507,9 +521,9 @@ function App() {
 
       <div className="panel">
         <h3>Leaderboards</h3>
-        <p className="subtitle">Public-safe display names, paginated for scale.</p>
+        <p className="subtitle">Public-safe first names only. Remote data when available.</p>
         <div className="grid">
-          {leaderboards.map((entry) => (
+          {effectiveLeaderboards.map((entry) => (
             <div className="panel" key={entry.id}>
               <h4>{entry.label}</h4>
               <div className="stat">
@@ -527,7 +541,7 @@ function App() {
                 <span>{ex.exerciseName}</span>
                 <strong>{formatNumber(ex.strokes)}</strong>
               </div>
-              <p className="subtitle">Example local leaderboard entry.</p>
+              <p className="subtitle">Local exercise totals (private to you).</p>
             </div>
           ))}
         </div>

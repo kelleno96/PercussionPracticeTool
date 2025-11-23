@@ -1,8 +1,15 @@
-import type { Session, StrokeEvent, UserProfile } from "../types";
+import type { LeaderboardEntry, Session, StrokeEvent, UserProfile } from "../types";
 import { hasRemoteBackend, supabase } from "./supabaseClient";
 import { appendStroke, loadExercises, loadProfile, loadSessions, saveExercises, saveProfile, saveSessions } from "./localStore";
 
 export type AuthProvider = "google";
+
+const firstNameFrom = (name?: string | null) => {
+  if (!name) return "Drummer";
+  const trimmed = name.trim();
+  if (!trimmed) return "Drummer";
+  return trimmed.split(/\s+/)[0];
+};
 
 export async function signIn(provider: AuthProvider) {
   if (hasRemoteBackend && supabase) {
@@ -14,7 +21,7 @@ export async function signIn(provider: AuthProvider) {
     return data;
   }
   // Local fallback just fakes a profile
-  const profile = { displayName: "Offline drummer" };
+  const profile = { displayName: "Offline drummer", firstName: "Offline" };
   saveProfile(profile);
   return profile;
 }
@@ -23,24 +30,35 @@ export async function signOut() {
   if (hasRemoteBackend && supabase) {
     await supabase.auth.signOut();
   }
-  saveProfile({ displayName: "Offline drummer" });
+  saveProfile({ displayName: "Offline drummer", firstName: "Offline" });
 }
 
 export async function getProfile(): Promise<UserProfile | null> {
   if (hasRemoteBackend && supabase) {
     const { data } = await supabase.auth.getUser();
     if (data.user) {
-      return {
+      const displayName = data.user.user_metadata.full_name ?? data.user.email ?? "Drummer";
+      const profile: UserProfile = {
         id: data.user.id,
-        displayName: data.user.user_metadata.full_name ?? data.user.email ?? "Drummer",
+        displayName,
+        firstName: firstNameFrom(displayName),
         email: data.user.email ?? undefined
       };
+      try {
+        await supabase.from("profiles").upsert({
+          id: profile.id,
+          display_name: profile.displayName
+        });
+      } catch (err) {
+        console.warn("Profile upsert failed", err);
+      }
+      return profile;
     }
   }
   const local = loadProfile();
   return local
-    ? { id: "local", displayName: local.displayName }
-    : { id: "anon", displayName: "Guest drummer" };
+    ? { id: "local", displayName: local.displayName, firstName: local.firstName }
+    : { id: "anon", displayName: "Guest drummer", firstName: "Guest" };
 }
 
 export async function persistSession(session: Session) {
@@ -116,4 +134,28 @@ export function addExercise(name: string) {
   exercises.push(newExercise);
   saveExercises(exercises);
   return newExercise;
+}
+
+export async function fetchPublicLeaderboards(): Promise<LeaderboardEntry[]> {
+  if (hasRemoteBackend && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("leaderboard_cache")
+        .select("*")
+        .order("generated_at", { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      const payload = (data?.[0]?.payload as any[]) || [];
+      const category = data?.[0]?.category ?? "Leaderboard";
+      return payload.map((row, idx) => ({
+        id: `${data?.[0]?.id ?? "lb"}-${idx}`,
+        userName: firstNameFrom(row.display_name ?? row.name ?? row.user ?? "Drummer"),
+        value: row.value ?? row.total ?? 0,
+        label: category
+      }));
+    } catch (err) {
+      console.warn("Failed to fetch public leaderboards", err);
+    }
+  }
+  return [];
 }
