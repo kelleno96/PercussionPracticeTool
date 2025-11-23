@@ -11,14 +11,20 @@ type Props = {
   points: ImpulsePoint[];
   windowMs: number;
   height?: number;
+  metronomeTicks?: {
+    startMs: number;
+    intervalMs: number;
+  };
 };
 
 const clampDb = (db: number) => Math.max(-90, Math.min(6, db));
 
-export function ImpulseGraph({ points, windowMs, height = 200 }: Props) {
+export function ImpulseGraph({ points, windowMs, height = 200, metronomeTicks }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointsRef = useRef(points);
+  const ticksRef = useRef(metronomeTicks);
   pointsRef.current = points;
+  ticksRef.current = metronomeTicks;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -49,16 +55,33 @@ export function ImpulseGraph({ points, windowMs, height = 200 }: Props) {
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, w, h);
 
-      // time grid every second
-      const seconds = Math.floor(windowMs / 1000);
-      ctx.strokeStyle = "rgba(255,255,255,0.05)";
-      ctx.lineWidth = 1;
-      for (let i = 0; i <= seconds; i++) {
-        const x = w - (i * w) / seconds;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, h);
-        ctx.stroke();
+      // time grid aligned to metronome if provided, else per-second grid
+      const ticks = ticksRef.current;
+      if (ticks && ticks.intervalMs > 0) {
+        const { startMs, intervalMs } = ticks;
+        const firstTick =
+          startMs +
+          Math.max(0, Math.ceil((start - startMs) / intervalMs)) * intervalMs;
+        ctx.strokeStyle = "rgba(124,93,255,0.35)";
+        ctx.lineWidth = 1.5;
+        for (let t = firstTick; t <= now; t += intervalMs) {
+          const x = ((t - start) / windowMs) * w;
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+          ctx.stroke();
+        }
+      } else {
+        const seconds = Math.floor(windowMs / 1000);
+        ctx.strokeStyle = "rgba(255,255,255,0.05)";
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= seconds; i++) {
+          const x = w - (i * w) / seconds;
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+          ctx.stroke();
+        }
       }
 
       const filtered = pointsRef.current.filter((p) => p.t >= start);

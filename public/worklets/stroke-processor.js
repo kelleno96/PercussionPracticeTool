@@ -7,8 +7,8 @@ class StrokeProcessor extends AudioWorkletProcessor {
     this.alpha = 0.05; // smoothing factor
     this.cooldownFrames = 0;
     this.minDb = -55;
-    this.sensitivity = 2.6;
-    this.debounceMs = 85;
+    this.sensitivity = 1.25;
+    this.debounceMs = 35;
     this.lastHitTime = 0;
     this.port.onmessage = (event) => {
       const data = event.data || {};

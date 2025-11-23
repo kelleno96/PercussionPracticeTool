@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { ImpulseGraph, type ImpulsePoint } from "./components/ImpulseGraph";
 import { useStrokeDetector } from "./hooks/useStrokeDetector";
 import { useMetronome } from "./hooks/useMetronome";
@@ -31,6 +31,19 @@ const formatMs = (ms: number) => {
 
 const formatNumber = (n: number) => n.toLocaleString();
 
+const readCookie = (name: string) => {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.split("; ").find((row) => row.startsWith(`${name}=`));
+  if (!match) return null;
+  return decodeURIComponent(match.split("=")[1] ?? "");
+};
+
+const writeCookie = (name: string, value: string, days = 180) => {
+  if (typeof document === "undefined") return;
+  const expires = new Date(Date.now() + days * 86_400_000).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+};
+
 function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -38,16 +51,51 @@ function App() {
   const [exerciseId, setExerciseId] = useState<string>("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [impulses, setImpulses] = useState<ImpulsePoint[]>([]);
-  const [timeWindowMs, setTimeWindowMs] = useState(8000);
+  const [timeWindowMs, setTimeWindowMs] = useState(12000);
   const [logging, setLogging] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [thresholdDb, setThresholdDb] = useState(-40);
   const [liveCount, setLiveCount] = useState(0);
   const [authing, setAuthing] = useState(false);
+  const currentSessionRef = useRef<string | null>(null);
+  const autoStartedMicRef = useRef(false);
+  const [metronomeAnchorMs, setMetronomeAnchorMs] = useState<number | null>(null);
+  const [avOffsetMs, setAvOffsetMs] = useState(() => {
+    const saved = readCookie("stroke-counter-av-offset");
+    return saved ? Number(saved) || 0 : 0;
+  });
+  const [showCalibration, setShowCalibration] = useState(false);
+
+  const metronome = useMetronome({ tempo: 110, subdivision: 1, volume: 0.6 });
+
+  useEffect(() => {
+    currentSessionRef.current = currentSessionId;
+  }, [currentSessionId]);
+
+  const ensureSession = useCallback(() => {
+    if (currentSessionRef.current) return currentSessionRef.current;
+    const exercise = exerciseOptions.find((e) => e.id === exerciseId);
+    const session: Session = {
+      id: crypto.randomUUID(),
+      userId: profile?.id ?? "anon",
+      exerciseId: exerciseId || "default",
+      exerciseName: exercise?.name ?? "General",
+      startedAt: Date.now(),
+      strokes: [],
+      tempo: metronome.config.tempo,
+      subdivision: metronome.config.subdivision
+    };
+    setSessions((prev) => [session, ...prev]);
+    setCurrentSessionId(session.id);
+    currentSessionRef.current = session.id;
+    void persistSession(session);
+    return session.id;
+  }, [exerciseId, exerciseOptions, metronome.config.subdivision, metronome.config.tempo, profile?.id]);
 
   const { isRunning, status, levelDb, config, start, stop, updateConfig } = useStrokeDetector(
     useCallback(
       (stroke: StrokeEvent) => {
+        const sessionId = currentSessionRef.current ?? ensureSession();
         setThresholdDb(stroke.thresholdDb);
         setImpulses((prev) => {
           const now = performance.now();
@@ -57,17 +105,13 @@ function App() {
           ].filter((p) => p.t >= now - timeWindowMs);
           return next;
         });
-        if (currentSessionId) {
-          setSessions((prev) =>
-            prev.map((s) =>
-              s.id === currentSessionId ? { ...s, strokes: [...s.strokes, stroke] } : s
-            )
-          );
-          appendStrokeEvent(currentSessionId, { ...stroke, exerciseId });
-        }
+        setSessions((prev) =>
+          prev.map((s) => (s.id === sessionId ? { ...s, strokes: [...s.strokes, stroke] } : s))
+        );
+        appendStrokeEvent(sessionId, { ...stroke, exerciseId });
         setLiveCount((c) => c + 1);
       },
-      [currentSessionId, exerciseId, timeWindowMs]
+      [exerciseId, timeWindowMs, ensureSession]
     ),
     useCallback(
       (telemetry) => {
@@ -85,11 +129,19 @@ function App() {
     )
   );
 
-  const metronome = useMetronome({ tempo: 90, subdivision: 1, volume: 0.6 });
+  useEffect(() => {
+    if (isRunning && !currentSessionRef.current) {
+      ensureSession();
+    }
+  }, [ensureSession, isRunning]);
 
   useEffect(() => {
     document.body.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    writeCookie("stroke-counter-av-offset", String(avOffsetMs));
+  }, [avOffsetMs]);
 
   useEffect(() => {
     (async () => {
@@ -103,6 +155,13 @@ function App() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!isRunning && !autoStartedMicRef.current) {
+      autoStartedMicRef.current = true;
+      start().catch((err) => console.warn("Auto mic start failed", err));
+    }
+  }, [isRunning, start]);
+
   const currentSession = useMemo(
     () => sessions.find((s) => s.id === currentSessionId) ?? null,
     [sessions, currentSessionId]
@@ -115,33 +174,20 @@ function App() {
   const period = useMemo(() => strokesByPeriod(sessions, 14), [sessions]);
 
   const startSession = async () => {
-    if (currentSessionId) return;
-    const exercise = exerciseOptions.find((e) => e.id === exerciseId);
-    const session: Session = {
-      id: crypto.randomUUID(),
-      userId: profile?.id ?? "anon",
-      exerciseId: exerciseId || "default",
-      exerciseName: exercise?.name ?? "General",
-      startedAt: Date.now(),
-      strokes: [],
-      tempo: metronome.config.tempo,
-      subdivision: metronome.config.subdivision
-    };
-    setSessions((prev) => [session, ...prev]);
-    setCurrentSessionId(session.id);
-    await persistSession(session);
+    if (currentSessionRef.current) return;
+    ensureSession();
   };
 
   const stopSession = async () => {
-    if (!currentSessionId) return;
+    if (!currentSessionRef.current) return;
     const end = Date.now();
-    setSessions((prev) =>
-      prev.map((s) => (s.id === currentSessionId ? { ...s, endedAt: end } : s))
-    );
-    const session = sessions.find((s) => s.id === currentSessionId);
+    const id = currentSessionRef.current;
+    setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, endedAt: end } : s)));
+    const session = sessions.find((s) => s.id === id);
     if (session) {
       await persistSession({ ...session, endedAt: end });
     }
+    currentSessionRef.current = null;
     setCurrentSessionId(null);
     setLiveCount(0);
   };
@@ -151,6 +197,7 @@ function App() {
       stop();
     } else {
       await start();
+      if (!currentSessionRef.current) ensureSession();
     }
   };
 
@@ -189,6 +236,16 @@ function App() {
     }
   };
 
+  const toggleMetronome = async () => {
+    if (metronome.isRunning) {
+      metronome.stop();
+      setMetronomeAnchorMs(null);
+      return;
+    }
+    setMetronomeAnchorMs(performance.now());
+    await metronome.start();
+  };
+
   return (
     <div className="app">
       <div className="hero">
@@ -210,16 +267,10 @@ function App() {
           <button onClick={() => handleAuth("google")} disabled={authing}>
             Google
           </button>
-          <button onClick={() => handleAuth("apple")} disabled={authing}>
-            Apple
-          </button>
           <button onClick={handleSignOut} disabled={authing}>
             Sign out
           </button>
           <button onClick={toggleMic}>{isRunning ? "Stop microphone" : "Start microphone"}</button>
-          <button onClick={() => (metronome.isRunning ? metronome.stop() : metronome.start())}>
-            {metronome.isRunning ? "Stop metronome" : "Start metronome"}
-          </button>
         </div>
       </div>
 
@@ -275,44 +326,53 @@ function App() {
                 Sensitivity
                 <input
                   type="range"
-                  min="1.4"
-                  max="4"
+                  min="1"
+                  max="5"
                   step="0.1"
                   value={config.sensitivity}
                   onChange={(e) => updateConfig({ sensitivity: Number(e.target.value) })}
                 />
+                <div className="slider-value">x{config.sensitivity.toFixed(1)}</div>
               </label>
               <label>
                 Debounce (ms)
                 <input
                   type="range"
-                  min="40"
-                  max="140"
+                  min="20"
+                  max="200"
                   step="5"
                   value={config.debounceMs}
                   onChange={(e) => updateConfig({ debounceMs: Number(e.target.value) })}
                 />
+                <div className="slider-value">{config.debounceMs} ms</div>
               </label>
               <label>
                 Window (s)
                 <input
                   type="range"
                   min="5"
-                  max="12"
+                  max="20"
                   step="1"
                   value={timeWindowMs / 1000}
                   onChange={(e) => setTimeWindowMs(Number(e.target.value) * 1000)}
                 />
+                <div className="slider-value">{(timeWindowMs / 1000).toFixed(0)} s</div>
               </label>
             </div>
           </div>
         </div>
 
-        <div className="panel">
-          <h2>Metronome</h2>
-          <div className="controls-row">
-            <label>
-              Tempo
+      <div className="panel">
+        <h2>Metronome</h2>
+        <div className="controls-row" style={{ justifyContent: "space-between" }}>
+          <button onClick={toggleMetronome}>
+            {metronome.isRunning ? "Stop metronome" : "Start metronome"}
+          </button>
+          <span className="badge">Tempo base</span>
+        </div>
+        <div className="controls-row">
+          <label>
+            Tempo
               <input
                 className="input"
                 type="number"
@@ -347,12 +407,28 @@ function App() {
           <p className="subtitle">
             Sample-accurate scheduling runs alongside stroke detection with shared timebase.
           </p>
+          <div className="controls-row" style={{ marginTop: 12 }}>
+            <button onClick={() => setShowCalibration(true)}>AV calibration</button>
+            <span className="badge">Offset: {avOffsetMs} ms</span>
+          </div>
         </div>
       </div>
 
       <div className="panel">
         <h2>Impulse graph (last {timeWindowMs / 1000}s)</h2>
-        <ImpulseGraph points={impulses} windowMs={timeWindowMs} height={220} />
+        <ImpulseGraph
+          points={impulses}
+          windowMs={timeWindowMs}
+          height={220}
+          metronomeTicks={
+            metronome.isRunning && metronomeAnchorMs
+              ? {
+                  startMs: metronomeAnchorMs + avOffsetMs,
+                  intervalMs: 60000 / (metronome.config.tempo * metronome.config.subdivision)
+                }
+              : undefined
+          }
+        />
       </div>
 
       <div className="grid">
@@ -486,6 +562,47 @@ function App() {
           </pre>
         )}
       </div>
+
+      {showCalibration && (
+        <div className="modal">
+          <div className="modal-content">
+            <h3>Audio/Visual Calibration</h3>
+            <p className="subtitle">
+              Align the metronome click with the vertical grid lines, similar to a Guitar Hero AV
+              delay test.
+            </p>
+            <ol className="modal-steps">
+              <li>Start the metronome. Watch the impulse graph lines and listen to clicks.</li>
+              <li>
+                Adjust the offset slider below until the metronome click lands exactly when a grid
+                line passes the current time marker.
+              </li>
+              <li>Use headphones if possible to avoid room latency.</li>
+              <li>When it feels right, close this dialog. Offset stays applied.</li>
+            </ol>
+            <div className="controls-row" style={{ marginTop: 8 }}>
+              <label style={{ flex: 1 }}>
+                AV offset (ms)
+                <input
+                  type="range"
+                  min={-600}
+                  max={600}
+                  step={1}
+                  value={avOffsetMs}
+                  onChange={(e) => setAvOffsetMs(Number(e.target.value))}
+                  style={{ width: "100%" }}
+                />
+                <div className="slider-value">{avOffsetMs} ms</div>
+              </label>
+            </div>
+            <div className="controls-row" style={{ justifyContent: "flex-end", marginTop: 12 }}>
+              <button className="theme-toggle" onClick={() => setShowCalibration(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

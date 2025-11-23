@@ -2,7 +2,7 @@ import type { Session, StrokeEvent, UserProfile } from "../types";
 import { hasRemoteBackend, supabase } from "./supabaseClient";
 import { appendStroke, loadExercises, loadProfile, loadSessions, saveExercises, saveProfile, saveSessions } from "./localStore";
 
-export type AuthProvider = "google" | "apple";
+export type AuthProvider = "google";
 
 export async function signIn(provider: AuthProvider) {
   if (hasRemoteBackend && supabase) {
