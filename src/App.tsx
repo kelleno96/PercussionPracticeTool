@@ -84,14 +84,13 @@ function App() {
       (stroke: StrokeEvent) => {
         const sessionId = currentSessionRef.current;
         setThresholdDb(stroke.thresholdDb);
-        displayDbRef.current = 0.7 * displayDbRef.current + 0.3 * stroke.db;
         setImpulses((prev) => {
           const now = performance.now();
           const next = [
             ...prev,
             {
               t: now,
-              amplitude: displayDbRef.current,
+              amplitude: stroke.peakDb ?? stroke.db,
               isHit: true,
               thresholdDb: stroke.thresholdDb
             }

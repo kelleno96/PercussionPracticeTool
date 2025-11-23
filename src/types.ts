@@ -2,6 +2,7 @@ export type StrokeEvent = {
   id: string;
   at: number; // epoch ms
   db: number;
+  peakDb?: number;
   rms: number;
   thresholdDb: number;
   floorDb: number;

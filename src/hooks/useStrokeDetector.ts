@@ -93,6 +93,7 @@ export function useStrokeDetector(
                 id: crypto.randomUUID(),
                 at,
                 db: data.db,
+                peakDb: data.peakDb ?? data.db,
                 rms: data.rms,
                 thresholdDb: data.thresholdDb,
                 floorDb: data.floorDb
@@ -121,13 +122,17 @@ export function useStrokeDetector(
           processor.onaudioprocess = (event) => {
             const input = event.inputBuffer.getChannelData(0);
             let energy = 0;
+            let peakAbs = 0;
             for (let i = 0; i < input.length; i++) {
               energy += input[i] * input[i];
+              const abs = Math.abs(input[i]);
+              if (abs > peakAbs) peakAbs = abs;
             }
             const rms = Math.sqrt(energy / input.length);
             floorRef.current = merged.alpha * rms + (1 - merged.alpha) * floorRef.current;
             const floorDb = 20 * Math.log10(floorRef.current + 1e-9);
             const db = 20 * Math.log10(rms + 1e-9);
+            const peakDb = 20 * Math.log10(peakAbs + 1e-9);
             const thresholdDb = Math.max(floorDb + merged.sensitivity * 6, merged.minDb);
             const now = performance.now();
             if (db > thresholdDb && now - lastHitRef.current > merged.debounceMs) {
@@ -136,6 +141,7 @@ export function useStrokeDetector(
                 id: crypto.randomUUID(),
                 at: now,
                 db,
+                peakDb,
                 rms,
                 thresholdDb,
                 floorDb

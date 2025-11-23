@@ -28,17 +28,21 @@ class StrokeProcessor extends AudioWorkletProcessor {
     // mix to mono
     let frameEnergy = 0;
     let count = 0;
+    let peakAbs = 0;
     for (let channel = 0; channel < input.length; channel++) {
       const data = input[channel];
       for (let i = 0; i < data.length; i++) {
         const sample = data[i];
         frameEnergy += sample * sample;
         count++;
+        const abs = Math.abs(sample);
+        if (abs > peakAbs) peakAbs = abs;
       }
     }
     if (count === 0) return true;
     const rms = Math.sqrt(frameEnergy / count);
     const db = 20 * Math.log10(rms + 1e-9);
+    const peakDb = 20 * Math.log10(peakAbs + 1e-9);
 
     // adaptive noise floor via exponential moving average on linear rms
     this.energySMA = this.alpha * rms + (1 - this.alpha) * this.energySMA;
@@ -52,6 +56,7 @@ class StrokeProcessor extends AudioWorkletProcessor {
       this.port.postMessage({
         type: "stroke",
         db,
+        peakDb,
         rms,
         at: nowMs,
         floorDb,
