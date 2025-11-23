@@ -87,7 +87,8 @@ const shortHash = (input: string) => {
   return hash.toString(36).slice(0, 6);
 };
 
-const labelForUser = (profile?: Pick<UserProfile, "id" | "firstName" | "displayName">) => {
+const labelForUser = (profile?: Pick<UserProfile, "id" | "firstName" | "displayName" | "safeName">) => {
+  if (profile?.safeName) return profile.safeName;
   const base = profile?.firstName || profile?.displayName || "You";
   const tagSource = profile?.id || base;
   return `${base}_${shortHash(tagSource)}`;

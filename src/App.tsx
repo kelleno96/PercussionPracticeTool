@@ -102,14 +102,14 @@ function App() {
           setCalibrationHits((prev) => (prev.length < calibrationTarget ? [...prev, stroke.at] : prev));
         }
         if (sessionId) {
-          const session = sessions.find((s) => s.id === sessionId);
-          setSessions((prev) =>
-            prev.map((s) => (s.id === sessionId ? { ...s, strokes: [...s.strokes, stroke] } : s))
-          );
-          appendStrokeEvent(sessionId, { ...stroke, exerciseId }, session?.userId);
-          setLiveCount((c) => c + 1);
-        }
-      },
+      const session = sessions.find((s) => s.id === sessionId);
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, strokes: [...s.strokes, stroke] } : s))
+      );
+      appendStrokeEvent(sessionId, { ...stroke, exerciseId }, session?.userId);
+      setLiveCount((c) => c + 1);
+    }
+  },
       [exerciseId, timeWindowMs, calibrating, metronomeAnchorMs, sessions]
     ),
     useCallback(
@@ -147,13 +147,18 @@ function App() {
     (async () => {
       const loadedProfile = await getProfile();
       setProfile(loadedProfile);
-      const loadedSessions = await listSessions();
-      setSessions(loadedSessions);
       const exercises = listExercises();
       setExerciseOptions(exercises);
       setExerciseId(exercises[0]?.id ?? "");
     })();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      const loadedSessions = await listSessions();
+      setSessions(loadedSessions);
+    })();
+  }, [profile?.id]);
 
   useEffect(() => {
     (async () => {
@@ -187,7 +192,7 @@ function App() {
     const exercise = exerciseOptions.find((e) => e.id === exerciseId);
     const session: Session = {
       id: crypto.randomUUID(),
-      userId: profile?.id ?? "anon",
+      userId: profile?.id ?? "local",
       exerciseId: exerciseId || "default",
       exerciseName: exercise?.name ?? "General",
       startedAt: Date.now(),

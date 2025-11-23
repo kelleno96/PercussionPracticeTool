@@ -80,8 +80,10 @@ export async function getProfile(): Promise<UserProfile | null> {
 }
 
 export async function persistSession(session: Session) {
-  if (hasRemoteBackend && supabase) {
-    await supabase.from("sessions").upsert({
+  const canRemote =
+    hasRemoteBackend && supabase && session.userId && session.userId !== "anon" && session.userId !== "local";
+  if (canRemote) {
+    const { error } = await supabase.from("sessions").upsert({
       id: session.id,
       user_id: session.userId,
       exercise_id: session.exerciseId,
@@ -92,6 +94,14 @@ export async function persistSession(session: Session) {
       subdivision: session.subdivision ?? null,
       strokes: session.strokes
     });
+    if (error) {
+      console.warn("Failed to persist session remotely, saving locally", error.message);
+      const sessions = loadSessions();
+      const idx = sessions.findIndex((s) => s.id === session.id);
+      if (idx >= 0) sessions[idx] = session;
+      else sessions.push(session);
+      saveSessions(sessions);
+    }
   } else {
     const sessions = loadSessions();
     const idx = sessions.findIndex((s) => s.id === session.id);
@@ -102,7 +112,9 @@ export async function persistSession(session: Session) {
 }
 
 export async function appendStrokeEvent(sessionId: string, stroke: StrokeEvent, userId?: string) {
-  if (hasRemoteBackend && supabase) {
+  const canRemote =
+    hasRemoteBackend && supabase && userId && userId !== "anon" && userId !== "local";
+  if (canRemote) {
     const { error } = await supabase.from("strokes").insert({
       id: stroke.id,
       session_id: sessionId,
@@ -124,24 +136,30 @@ export async function appendStrokeEvent(sessionId: string, stroke: StrokeEvent, 
 
 export async function listSessions(): Promise<Session[]> {
   if (hasRemoteBackend && supabase) {
-    const { data, error } = await supabase
+    const { data, error, status } = await supabase
       .from("sessions_view")
       .select("*")
       .order("started_at", { ascending: false });
-    if (error) throw error;
-    return (
-      data?.map((row) => ({
-        id: row.id,
-        userId: row.user_id,
-        exerciseId: row.exercise_id,
-        exerciseName: row.exercise_name,
-        startedAt: new Date(row.started_at).getTime(),
-        endedAt: row.ended_at ? new Date(row.ended_at).getTime() : undefined,
-        tempo: row.tempo ?? undefined,
-        subdivision: row.subdivision ?? undefined,
-        strokes: (row.strokes ?? []) as StrokeEvent[]
-      })) ?? []
-    );
+    if (!error) {
+      return (
+        data?.map((row) => ({
+          id: row.id,
+          userId: row.user_id,
+          exerciseId: row.exercise_id,
+          exerciseName: row.exercise_name,
+          startedAt: new Date(row.started_at).getTime(),
+          endedAt: row.ended_at ? new Date(row.ended_at).getTime() : undefined,
+          tempo: row.tempo ?? undefined,
+          subdivision: row.subdivision ?? undefined,
+          strokes: (row.strokes ?? []) as StrokeEvent[]
+        })) ?? []
+      );
+    }
+    if (status === 401 || status === 403) {
+      console.warn("Not authenticated when fetching sessions, falling back to local");
+    } else {
+      console.warn("Failed to fetch sessions, falling back to local", error?.message);
+    }
   }
   return loadSessions();
 }
