@@ -13,6 +13,7 @@ import {
 } from "./analytics";
 import type { Session, StrokeEvent } from "./types";
 import type { DetectorConfig } from "./hooks/useStrokeDetector";
+import { clearLocalData } from "./services/api";
 
 const formatMs = (ms: number) => {
   const totalSeconds = Math.floor(ms / 1000);
@@ -156,7 +157,17 @@ function App() {
   const streak = useMemo(() => streakDays(sessions), [sessions]);
   const weekly = useMemo(() => weeklyTotals(sessions), [sessions]);
   const exerciseTotals = useMemo(() => aggregateExerciseTotals(sessions), [sessions]);
-  const period = useMemo(() => strokesByPeriod(sessions, 14), [sessions]);
+  const period = useMemo(() => strokesByPeriod(sessions, 30), [sessions]);
+
+  const clearStats = () => {
+    const ok = window.confirm("Reset all local sessions and stroke counts? This cannot be undone.");
+    if (!ok) return;
+    clearLocalData();
+    setSessions([]);
+    setCurrentSessionId(null);
+    currentSessionRef.current = null;
+    setLiveCount(0);
+  };
 
   const startSession = async () => {
     if (currentSessionRef.current) return;
@@ -487,6 +498,11 @@ function App() {
             <span>This week</span>
             <strong>{weekly} strokes</strong>
           </div>
+          <div className="controls-row" style={{ marginTop: 12 }}>
+            <button className="theme-toggle" onClick={clearStats}>
+              Clear lifetime stats
+            </button>
+          </div>
         </div>
 
         <div className="panel">
@@ -505,7 +521,7 @@ function App() {
         </div>
 
         <div className="panel">
-          <h3>Recent trend</h3>
+          <h3>Recent trend (30 days)</h3>
           <div className="charts">
             {period.map((day) => {
               const value = day.strokes;
@@ -513,14 +529,14 @@ function App() {
                 <div key={day.date} style={{ display: "flex", flexDirection: "column" }}>
                   <div
                     style={{
-                      height: `${Math.min(100, value * 2)}px`,
+                      height: `${Math.min(120, value * 2)}px`,
                       background: "linear-gradient(120deg, var(--accent), var(--accent-2))",
                       borderRadius: 12,
                       boxShadow: "var(--shadow)"
                     }}
                   />
                   <small style={{ color: "var(--muted)" }}>
-                    {new Date(day.date).toLocaleDateString(undefined, { weekday: "short" })} ·{" "}
+                    {new Date(day.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })} ·{" "}
                     {value}
                   </small>
                 </div>
@@ -528,6 +544,52 @@ function App() {
             })}
           </div>
         </div>
+      </div>
+
+      <div className="panel">
+        <h3>Session history</h3>
+        <p className="subtitle">Detailed per-session view with strokes and duration.</p>
+        <div className="charts" style={{ marginBottom: 12 }}>
+          {period.slice(-14).map((day) => {
+            const value = day.strokes;
+            return (
+              <div key={day.date} style={{ display: "flex", flexDirection: "column" }}>
+                <div
+                  style={{
+                    height: `${Math.min(120, value * 2)}px`,
+                    background: "linear-gradient(120deg, var(--stroke), var(--accent))",
+                    borderRadius: 12,
+                    boxShadow: "var(--shadow)"
+                  }}
+                />
+                <small style={{ color: "var(--muted)" }}>
+                  {new Date(day.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })} ·{" "}
+                  {value} strokes
+                </small>
+              </div>
+            );
+          })}
+        </div>
+        <ul className="list">
+          {sessions.map((s) => (
+            <li key={s.id}>
+              <div>
+                <strong>{s.exerciseName}</strong>
+                <p>
+                  {new Date(s.startedAt).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                  })}
+                  {" · "}
+                  {formatMs((s.endedAt ?? Date.now()) - s.startedAt)} · {s.strokes.length} strokes
+                </p>
+              </div>
+              <span className="badge">{s.tempo ? `${s.tempo} bpm` : "Session"}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="panel">

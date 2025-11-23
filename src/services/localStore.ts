@@ -28,6 +28,10 @@ export function saveSessions(sessions: Session[]) {
   write(SESSIONS_KEY, sessions);
 }
 
+export function clearSessions() {
+  write(SESSIONS_KEY, []);
+}
+
 export function loadExercises() {
   return read<{ id: string; name: string }[]>(EXERCISES_KEY, [
     { id: "single", name: "Single strokes" },

@@ -1,6 +1,6 @@
 import type { LeaderboardEntry, Session, StrokeEvent, UserProfile } from "../types";
 import { hasRemoteBackend, supabase } from "./supabaseClient";
-import { appendStroke, loadExercises, loadProfile, loadSessions, saveExercises, saveProfile, saveSessions } from "./localStore";
+import { appendStroke, clearSessions, loadExercises, loadProfile, loadSessions, saveExercises, saveProfile, saveSessions } from "./localStore";
 
 export type AuthProvider = "google";
 
@@ -186,6 +186,10 @@ export function addExercise(name: string) {
   exercises.push(newExercise);
   saveExercises(exercises);
   return newExercise;
+}
+
+export function clearLocalData() {
+  clearSessions();
 }
 
 export async function fetchPublicLeaderboards(): Promise<LeaderboardEntry[]> {
