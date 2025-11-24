@@ -76,7 +76,7 @@ function App() {
             ...prev,
             {
               t: now,
-              amplitude: stroke.db,
+              amplitude: stroke.peakDb ?? stroke.db,
               isHit: true,
               thresholdDb: stroke.thresholdDb
             }
