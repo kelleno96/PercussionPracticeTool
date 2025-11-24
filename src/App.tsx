@@ -383,40 +383,10 @@ function App() {
 
       <div className="panel">
         <h2>Impulse graph (last {timeWindowMs / 1000}s)</h2>
-        <div className="controls-row">
-          <label>
-            Min dB
-            <input
-              className="input"
-              type="range"
-              min={-120}
-              max={0}
-              step={1}
-              value={minDbDisplay}
-              onChange={(e) => setMinDbDisplay(Number(e.target.value))}
-            />
-            <div className="slider-value">{minDbDisplay} dB</div>
-          </label>
-          <label>
-            Max dB
-            <input
-              className="input"
-              type="range"
-              min={-40}
-              max={20}
-              step={1}
-              value={maxDbDisplay}
-              onChange={(e) => setMaxDbDisplay(Number(e.target.value))}
-            />
-            <div className="slider-value">{maxDbDisplay} dB</div>
-          </label>
-        </div>
         <ImpulseGraph
           points={impulses}
           windowMs={timeWindowMs}
           height={220}
-          minDb={minDbDisplay}
-          maxDb={maxDbDisplay}
           metronomeTicks={
             metronome.isRunning && metronomeAnchorMs
               ? {

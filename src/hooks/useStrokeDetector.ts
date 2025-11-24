@@ -118,24 +118,20 @@ export function useStrokeDetector(
         }
 
         if (!connected) {
-          const processor = ctx.createScriptProcessor(512, 1, 1);
+          const processor = ctx.createScriptProcessor(1024, 1, 1);
           const silent = ctx.createGain();
           silent.gain.value = 0;
           processor.onaudioprocess = (event) => {
             const input = event.inputBuffer.getChannelData(0);
-            const prev = floorRef.currentBuffer ?? new Float32Array(0);
-            const combined = new Float32Array(prev.length + input.length);
-            if (prev.length) combined.set(prev, 0);
-            combined.set(input, prev.length);
             let energy = 0;
             let peakAbs = 0;
-            for (let i = 0; i < combined.length; i++) {
-              const sample = combined[i];
+            for (let i = 0; i < input.length; i++) {
+              const sample = input[i];
               energy += sample * sample;
               const abs = Math.abs(sample);
               if (abs > peakAbs) peakAbs = abs;
             }
-            const rms = Math.sqrt(energy / combined.length);
+            const rms = Math.sqrt(energy / input.length);
             floorRef.current = merged.alpha * rms + (1 - merged.alpha) * floorRef.current;
             const floorDb = 20 * Math.log10(floorRef.current + 1e-9);
             const db = 20 * Math.log10(rms + 1e-9);
@@ -157,11 +153,6 @@ export function useStrokeDetector(
             }
             setLevelDb(db);
             onTelemetry?.({ db, thresholdDb, floorDb });
-            const keep = Math.min(256, combined.length);
-            const tail = combined.subarray(combined.length - keep, combined.length);
-            // store as plain Float32Array on ref for next call
-            // @ts-expect-error custom prop
-            floorRef.currentBuffer = new Float32Array(tail);
           };
           source.connect(processor);
           processor.connect(silent).connect(ctx.destination);

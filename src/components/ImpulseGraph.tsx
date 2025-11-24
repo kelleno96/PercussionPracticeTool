@@ -104,14 +104,6 @@ export function ImpulseGraph({
         return h - normalized * (h * 0.9);
       };
 
-      // draw Y-axis bounds
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
-      ctx.font = "12px sans-serif";
-      ctx.textBaseline = "top";
-      ctx.fillText(`${safeMax.toFixed(0)} dB`, 8, 8);
-      ctx.textBaseline = "bottom";
-      ctx.fillText(`${safeMin.toFixed(0)} dB`, 8, h - 8);
-
       // threshold line (from last point)
       const last = filtered[filtered.length - 1];
       if (last?.thresholdDb !== undefined) {

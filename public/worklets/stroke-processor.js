@@ -10,7 +10,6 @@ class StrokeProcessor extends AudioWorkletProcessor {
     this.sensitivity = 1.5;
     this.debounceMs = 35;
     this.lastHitTime = 0;
-    this.prevBlock = new Float32Array(0);
     this.port.onmessage = (event) => {
       const data = event.data || {};
       if (data.type === "config") {
@@ -26,29 +25,24 @@ class StrokeProcessor extends AudioWorkletProcessor {
     const input = inputs[0];
     if (!input || input.length === 0) return true;
 
-    // mix to mono with sliding window including previous block to catch narrow peaks
-    const mono = input[0];
-    if (!mono || mono.length === 0) return true;
-    const combinedLen = this.prevBlock.length + mono.length;
-    const combined = new Float32Array(combinedLen);
-    if (this.prevBlock.length) combined.set(this.prevBlock, 0);
-    combined.set(mono, this.prevBlock.length);
-
+    // mix to mono
     let frameEnergy = 0;
+    let count = 0;
     let peakAbs = 0;
-    for (let i = 0; i < combined.length; i++) {
-      const sample = combined[i];
-      frameEnergy += sample * sample;
-      const abs = Math.abs(sample);
-      if (abs > peakAbs) peakAbs = abs;
+    for (let channel = 0; channel < input.length; channel++) {
+      const data = input[channel];
+      for (let i = 0; i < data.length; i++) {
+        const sample = data[i];
+        frameEnergy += sample * sample;
+        count++;
+        const abs = Math.abs(sample);
+        if (abs > peakAbs) peakAbs = abs;
+      }
     }
-    const rms = Math.sqrt(frameEnergy / combined.length);
+    if (count === 0) return true;
+    const rms = Math.sqrt(frameEnergy / count);
     const db = 20 * Math.log10(rms + 1e-9);
     const peakDb = 20 * Math.log10(peakAbs + 1e-9);
-
-    // keep tail for next block
-    const keep = Math.min(256, combined.length);
-    this.prevBlock = combined.subarray(combined.length - keep, combined.length);
 
     // adaptive noise floor via exponential moving average on linear rms
     this.energySMA = this.alpha * rms + (1 - this.alpha) * this.energySMA;
