@@ -104,6 +104,14 @@ export function ImpulseGraph({
         return h - normalized * (h * 0.9);
       };
 
+      // Y-axis labels
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.font = "12px sans-serif";
+      ctx.textBaseline = "top";
+      ctx.fillText(`${safeMax.toFixed(0)} ms`, 8, 8);
+      ctx.textBaseline = "bottom";
+      ctx.fillText(`${safeMin.toFixed(0)} ms`, 8, h - 8);
+
       // threshold line (from last point)
       const last = filtered[filtered.length - 1];
       if (last?.thresholdDb !== undefined) {

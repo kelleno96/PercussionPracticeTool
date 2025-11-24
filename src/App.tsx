@@ -42,6 +42,7 @@ function App() {
   const [exerciseId, setExerciseId] = useState<string>("");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [impulses, setImpulses] = useState<ImpulsePoint[]>([]);
+  const [timingPoints, setTimingPoints] = useState<ImpulsePoint[]>([]);
   const [timeWindowMs, setTimeWindowMs] = useState(5000);
   const [minDbDisplay, setMinDbDisplay] = useState(-45);
   const [maxDbDisplay, setMaxDbDisplay] = useState(-10);
@@ -58,6 +59,7 @@ function App() {
   });
   const [showCalibration, setShowCalibration] = useState(false);
   const displayDbRef = useRef(-90);
+  const prevStrokeTimeRef = useRef<number | null>(null);
 
   const metronome = useMetronome({ tempo: 110, subdivision: 1, volume: 0.6 });
 
@@ -83,6 +85,22 @@ function App() {
           ].filter((p) => p.t >= now - timeWindowMs);
           return next;
         });
+        // timing graph (inter-onset interval)
+        const prev = prevStrokeTimeRef.current;
+        const nowMs = performance.now();
+        if (prev !== null) {
+          const delta = nowMs - prev;
+          if (delta <= 500) {
+            setTimingPoints((prevPoints) => {
+              const next = [
+                ...prevPoints,
+                { t: nowMs, amplitude: delta, isHit: true }
+              ].filter((p) => p.t >= nowMs - timeWindowMs);
+              return next;
+            });
+          }
+        }
+        prevStrokeTimeRef.current = nowMs;
         if (sessionId) {
           const session = sessions.find((s) => s.id === sessionId);
           setSessions((prev) =>
@@ -106,6 +124,20 @@ function App() {
           ].filter((p) => p.t >= now - timeWindowMs);
           return next;
         });
+        const prev = prevStrokeTimeRef.current;
+        const nowMs = performance.now();
+        if (prev !== null) {
+          const delta = nowMs - prev;
+          if (delta <= 500) {
+            setTimingPoints((prevPoints) => {
+              const next = [
+                ...prevPoints,
+                { t: nowMs, amplitude: delta }
+              ].filter((p) => p.t >= nowMs - timeWindowMs);
+              return next;
+            });
+          }
+        }
       },
       [timeWindowMs]
     )
@@ -391,11 +423,31 @@ function App() {
             metronome.isRunning && metronomeAnchorMs
               ? {
                   startMs: metronomeAnchorMs + avOffsetMs,
-                  intervalMs: 60000 / (metronome.config.tempo * metronome.config.subdivision)
+                  intervalMs: (60 / metronome.config.tempo) * (4 / metronome.config.denominator) * 1000
                 }
               : undefined
           }
         />
+      </div>
+
+      <div className="panel">
+        <h2>Timing consistency (last {timeWindowMs / 1000}s)</h2>
+        <ImpulseGraph
+          points={timingPoints}
+          windowMs={timeWindowMs}
+          height={180}
+          minDb={0}
+          maxDb={300}
+          metronomeTicks={
+            metronome.isRunning && metronomeAnchorMs
+              ? {
+                  startMs: metronomeAnchorMs + avOffsetMs,
+                  intervalMs: (60 / metronome.config.tempo) * (4 / metronome.config.denominator) * 1000
+                }
+              : undefined
+          }
+        />
+        <p className="subtitle">Shows ms since previous stroke; ignores gaps over 500 ms.</p>
       </div>
 
       <div className="grid">
