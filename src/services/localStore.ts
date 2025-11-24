@@ -34,9 +34,21 @@ export function clearSessions() {
 
 export function loadExercises() {
   return read<{ id: string; name: string }[]>(EXERCISES_KEY, [
-    { id: "single", name: "Single strokes" },
-    { id: "para", name: "Paradiddle" },
-    { id: "flam", name: "Flam taps" }
+    { id: "eights", name: "Eights" },
+    { id: "accent-taps", name: "Accent Taps" },
+    { id: "short-short-long", name: "Short-Short-Long" },
+    { id: "triplet-rolls", name: "Triplet Rolls" },
+    { id: "twos", name: "Twos (Double Beat)" },
+    { id: "threes", name: "Threes (Triple Beat)" },
+    { id: "16th-accent-grid", name: "16th Note Accent Grid" },
+    { id: "triplet-accent-grid", name: "Triplet Accent Grid" },
+    { id: "16th-diddle-grid", name: "16th Note Diddle Grid" },
+    { id: "triplet-diddle-grid", name: "Triplet Diddle Grid" },
+    { id: "mini-poofs", name: "MiniPoofs" },
+    { id: "flamkuchen", name: "Flamkuchen" },
+    { id: "stick-control-1", name: "Stick Control #1" },
+    { id: "stick-control-2", name: "Stick Control #2" },
+    { id: "stick-control-16th", name: "Stick Control (16th Notes)" }
   ]);
 }
 

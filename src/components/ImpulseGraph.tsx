@@ -15,16 +15,27 @@ type Props = {
     startMs: number;
     intervalMs: number;
   };
+  minDb?: number;
+  maxDb?: number;
 };
 
-const clampDb = (db: number) => Math.max(-90, Math.min(6, db));
-
-export function ImpulseGraph({ points, windowMs, height = 200, metronomeTicks }: Props) {
+export function ImpulseGraph({
+  points,
+  windowMs,
+  height = 200,
+  metronomeTicks,
+  minDb = -100,
+  maxDb = 10
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointsRef = useRef(points);
   const ticksRef = useRef(metronomeTicks);
+  const minDbRef = useRef(minDb);
+  const maxDbRef = useRef(maxDb);
   pointsRef.current = points;
   ticksRef.current = metronomeTicks;
+  minDbRef.current = minDb;
+  maxDbRef.current = maxDb;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -85,10 +96,21 @@ export function ImpulseGraph({ points, windowMs, height = 200, metronomeTicks }:
       }
 
       const filtered = pointsRef.current.filter((p) => p.t >= start);
+      const safeMin = Math.min(minDbRef.current, maxDbRef.current - 1);
+      const safeMax = Math.max(maxDbRef.current, minDbRef.current + 1);
+      const range = safeMax - safeMin;
       const ampToY = (db: number) => {
-        const normalized = (clampDb(db) + 90) / 90; // 0..1
+        const normalized = (db - safeMin) / range; // 0..1
         return h - normalized * (h * 0.9);
       };
+
+      // draw Y-axis bounds
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.font = "12px sans-serif";
+      ctx.textBaseline = "top";
+      ctx.fillText(`${safeMax.toFixed(0)} dB`, 8, 8);
+      ctx.textBaseline = "bottom";
+      ctx.fillText(`${safeMin.toFixed(0)} dB`, 8, h - 8);
 
       // threshold line (from last point)
       const last = filtered[filtered.length - 1];
@@ -127,7 +149,7 @@ export function ImpulseGraph({ points, windowMs, height = 200, metronomeTicks }:
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
     };
-  }, [windowMs, height]);
+  }, [windowMs, height, minDb, maxDb]);
 
   return <canvas ref={canvasRef} style={{ width: "100%", height }} />;
 }

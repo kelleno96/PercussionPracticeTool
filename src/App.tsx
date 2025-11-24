@@ -43,6 +43,8 @@ function App() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [impulses, setImpulses] = useState<ImpulsePoint[]>([]);
   const [timeWindowMs, setTimeWindowMs] = useState(5000);
+  const [minDbDisplay, setMinDbDisplay] = useState(-100);
+  const [maxDbDisplay, setMaxDbDisplay] = useState(10);
   const [logging, setLogging] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [thresholdDb, setThresholdDb] = useState(-40);
@@ -74,7 +76,7 @@ function App() {
             ...prev,
             {
               t: now,
-              amplitude: stroke.peakDb ?? stroke.db,
+              amplitude: stroke.db,
               isHit: true,
               thresholdDb: stroke.thresholdDb
             }
@@ -123,7 +125,7 @@ function App() {
       setSessions(loadedSessions);
       const exercises = listExercises();
       setExerciseOptions(exercises);
-      setExerciseId(exercises[0]?.id ?? "");
+      setExerciseId(exercises.find((e) => e.id === "eights")?.id ?? exercises[0]?.id ?? "");
     })();
   }, []);
 
@@ -239,7 +241,7 @@ function App() {
       </div>
 
       <div className="grid">
-        <div className={`panel ${currentSessionId ? "recording" : ""}`}>
+        <div className={`panel ${currentSessionId ? "recording live" : ""}`}>
           <h2>Session</h2>
           <div className="controls-row">
             <select
@@ -263,7 +265,7 @@ function App() {
               End session
             </button>
             <span className="recording-pill" aria-live="polite">
-              <span className="pulse" aria-hidden="true" />
+              <span className={`pulse ${currentSessionId ? "live" : ""}`} aria-hidden="true" />
               {currentSessionId ? "Recording" : "Idle"} · {status}
             </span>
           </div>
@@ -303,9 +305,9 @@ function App() {
                 Debounce (ms)
                 <input
                   type="range"
-                  min="20"
-                  max="200"
-                  step="5"
+                  min="5"
+                  max="50"
+                  step="1"
                   value={config.debounceMs}
                   onChange={(e) => updateConfig({ debounceMs: Number(e.target.value) })}
                 />
@@ -381,10 +383,40 @@ function App() {
 
       <div className="panel">
         <h2>Impulse graph (last {timeWindowMs / 1000}s)</h2>
+        <div className="controls-row">
+          <label>
+            Min dB
+            <input
+              className="input"
+              type="range"
+              min={-120}
+              max={0}
+              step={1}
+              value={minDbDisplay}
+              onChange={(e) => setMinDbDisplay(Number(e.target.value))}
+            />
+            <div className="slider-value">{minDbDisplay} dB</div>
+          </label>
+          <label>
+            Max dB
+            <input
+              className="input"
+              type="range"
+              min={-40}
+              max={20}
+              step={1}
+              value={maxDbDisplay}
+              onChange={(e) => setMaxDbDisplay(Number(e.target.value))}
+            />
+            <div className="slider-value">{maxDbDisplay} dB</div>
+          </label>
+        </div>
         <ImpulseGraph
           points={impulses}
           windowMs={timeWindowMs}
           height={220}
+          minDb={minDbDisplay}
+          maxDb={maxDbDisplay}
           metronomeTicks={
             metronome.isRunning && metronomeAnchorMs
               ? {

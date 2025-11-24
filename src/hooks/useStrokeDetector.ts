@@ -9,10 +9,10 @@ export type DetectorConfig = {
 };
 
 const defaultConfig: DetectorConfig = {
-  sensitivity: 1.5,
-  debounceMs: 35,
-  minDb: -55,
-  alpha: 0.05
+  sensitivity: 1.6,
+  debounceMs: 20,
+  minDb: -60,
+  alpha: 0.1
 };
 
 type Telemetry = {
@@ -69,10 +69,12 @@ export function useStrokeDetector(
             echoCancellation: false,
             noiseSuppression: false,
             autoGainControl: false,
-            channelCount: 1
+            channelCount: 1,
+            sampleRate: 48000,
+            sampleSize: 24
           }
         });
-        const ctx = new AudioContext({ latencyHint: "interactive" });
+        const ctx = new AudioContext({ latencyHint: "interactive", sampleRate: 48000 });
         streamRef.current = stream;
         ctxRef.current = ctx;
         const source = ctx.createMediaStreamSource(stream);
@@ -116,7 +118,7 @@ export function useStrokeDetector(
         }
 
         if (!connected) {
-          const processor = ctx.createScriptProcessor(1024, 1, 1);
+          const processor = ctx.createScriptProcessor(512, 1, 1);
           const silent = ctx.createGain();
           silent.gain.value = 0;
           processor.onaudioprocess = (event) => {

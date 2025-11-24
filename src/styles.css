@@ -95,6 +95,11 @@ button:active {
   position: relative;
 }
 
+.panel.recording.live {
+  border-color: rgba(74, 222, 128, 0.8);
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.5), var(--shadow);
+}
+
 .recording-pill {
   display: inline-flex;
   align-items: center;
@@ -114,6 +119,11 @@ button:active {
   background: var(--danger);
   box-shadow: 0 0 0 0 rgba(255, 75, 110, 0.8);
   animation: pulse 1s ease-in-out infinite;
+}
+
+.pulse.live {
+  background: var(--success);
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.8);
 }
 
 @keyframes pulse {
