@@ -8,9 +8,9 @@ export type DetectorConfig = {
   alpha: number;
 };
 
-const defaultConfig: DetectorConfig = {
-  sensitivity: 1.6,
-  debounceMs: 20,
+export const defaultConfig: DetectorConfig = {
+  sensitivity: 1.3,
+  debounceMs: 8,
   minDb: -60,
   alpha: 0.1
 };

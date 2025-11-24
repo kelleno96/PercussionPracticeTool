@@ -43,8 +43,8 @@ function App() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [impulses, setImpulses] = useState<ImpulsePoint[]>([]);
   const [timeWindowMs, setTimeWindowMs] = useState(5000);
-  const [minDbDisplay, setMinDbDisplay] = useState(-100);
-  const [maxDbDisplay, setMaxDbDisplay] = useState(10);
+  const [minDbDisplay, setMinDbDisplay] = useState(-45);
+  const [maxDbDisplay, setMaxDbDisplay] = useState(-10);
   const [logging, setLogging] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [thresholdDb, setThresholdDb] = useState(-40);
@@ -462,6 +462,17 @@ function App() {
           <div className="controls-row" style={{ marginTop: 12 }}>
             <button className="theme-toggle" onClick={clearStats}>
               Clear lifetime stats
+            </button>
+            <button
+              className="theme-toggle"
+              onClick={() => {
+                const ok = window.confirm("Clear ALL local data (sessions, exercises, settings)?");
+                if (!ok) return;
+                localStorage.clear();
+                window.location.reload();
+              }}
+            >
+              Clear all local data
             </button>
           </div>
         </div>
