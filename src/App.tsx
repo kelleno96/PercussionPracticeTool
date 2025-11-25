@@ -62,6 +62,19 @@ function App() {
   const prevStrokeTimeRef = useRef<number | null>(null);
 
   const metronome = useMetronome({ tempo: 110, subdivision: 1, volume: 0.6 });
+  const tempoVal = metronome.config.tempo ?? 110;
+  const denomVal = (metronome.config as any).denominator ?? (metronome.config as any).subdivision ?? 4;
+  const quarterMs = (60 / tempoVal) * 1000;
+  const refLines = [
+    { value: quarterMs, label: "Quarter" },
+    { value: quarterMs / 2, label: "Eighth" },
+    { value: quarterMs / 3, label: "Triplet" },
+    { value: quarterMs / 4, label: "16th" },
+    { value: quarterMs / 6, label: "Sextuplet" },
+    { value: quarterMs / 8, label: "32nd" }
+  ];
+  const timingMin = quarterMs / 10;
+  const timingMax = Math.max(600, ...refLines.map((r) => r.value));
 
   useEffect(() => {
     currentSessionRef.current = currentSessionId;
@@ -349,7 +362,7 @@ function App() {
                 Window (s)
                 <input
                   type="range"
-                  min="5"
+                  min="1"
                   max="20"
                   step="1"
                   value={timeWindowMs / 1000}
@@ -423,7 +436,7 @@ function App() {
             metronome.isRunning && metronomeAnchorMs
               ? {
                   startMs: metronomeAnchorMs + avOffsetMs,
-                  intervalMs: (60 / metronome.config.tempo) * (4 / metronome.config.denominator) * 1000
+                  intervalMs: (60 / tempoVal) * (4 / denomVal) * 1000
                 }
               : undefined
           }
@@ -435,14 +448,18 @@ function App() {
         <ImpulseGraph
           points={timingPoints}
           windowMs={timeWindowMs}
-          height={180}
-          minDb={0}
-          maxDb={300}
+          height={240}
+          minDb={timingMin}
+          maxDb={timingMax}
+          logScale
+          yUnit=" ms"
+          labelPosition="left"
+          horizontalLines={refLines}
           metronomeTicks={
             metronome.isRunning && metronomeAnchorMs
               ? {
                   startMs: metronomeAnchorMs + avOffsetMs,
-                  intervalMs: (60 / metronome.config.tempo) * (4 / metronome.config.denominator) * 1000
+                  intervalMs: (60 / tempoVal) * (4 / denomVal) * 1000
                 }
               : undefined
           }

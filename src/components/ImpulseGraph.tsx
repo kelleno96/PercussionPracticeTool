@@ -17,6 +17,9 @@ type Props = {
   };
   minDb?: number;
   maxDb?: number;
+  logScale?: boolean;
+  horizontalLines?: { value: number; label?: string }[];
+  yUnit?: string;
 };
 
 export function ImpulseGraph({
@@ -25,7 +28,11 @@ export function ImpulseGraph({
   height = 200,
   metronomeTicks,
   minDb = -100,
-  maxDb = 10
+  maxDb = 10,
+  logScale = false,
+  horizontalLines = [],
+  yUnit = "",
+  labelPosition = "right"
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointsRef = useRef(points);
@@ -98,9 +105,15 @@ export function ImpulseGraph({
       const filtered = pointsRef.current.filter((p) => p.t >= start);
       const safeMin = Math.min(minDbRef.current, maxDbRef.current - 1);
       const safeMax = Math.max(maxDbRef.current, minDbRef.current + 1);
-      const range = safeMax - safeMin;
+      const logMin = Math.log2(Math.max(1e-3, safeMin));
+      const logMax = Math.log2(Math.max(1e-3, safeMax));
+      const rangeLinear = safeMax - safeMin;
+      const rangeLog = logMax - logMin || 1;
       const ampToY = (db: number) => {
-        const normalized = (db - safeMin) / range; // 0..1
+        const clamped = Math.min(safeMax, Math.max(safeMin, db));
+        const normalized = logScale
+          ? (Math.log2(Math.max(1e-3, clamped)) - logMin) / rangeLog
+          : (clamped - safeMin) / rangeLinear;
         return h - normalized * (h * 0.9);
       };
 
@@ -108,9 +121,9 @@ export function ImpulseGraph({
       ctx.fillStyle = "rgba(255,255,255,0.6)";
       ctx.font = "12px sans-serif";
       ctx.textBaseline = "top";
-      ctx.fillText(`${safeMax.toFixed(0)} ms`, 8, 8);
+      ctx.fillText(`${safeMax.toFixed(0)}${yUnit}`, 8, 8);
       ctx.textBaseline = "bottom";
-      ctx.fillText(`${safeMin.toFixed(0)} ms`, 8, h - 8);
+      ctx.fillText(`${safeMin.toFixed(0)}${yUnit}`, 8, h - 8);
 
       // threshold line (from last point)
       const last = filtered[filtered.length - 1];
@@ -142,6 +155,25 @@ export function ImpulseGraph({
         }
       });
 
+      // horizontal reference lines
+      horizontalLines.forEach((line) => {
+        const y = ampToY(line.value);
+        ctx.strokeStyle = "rgba(255,255,255,0.1)";
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (line.label) {
+          ctx.fillStyle = "rgba(255,255,255,0.6)";
+          ctx.font = "11px sans-serif";
+          ctx.textBaseline = "middle";
+          const xPos = labelPosition === "left" ? 8 : w - 140;
+          ctx.fillText(line.label, xPos, y);
+        }
+      });
+
       requestAnimationFrame(render);
     };
     const raf = requestAnimationFrame(render);
@@ -149,7 +181,7 @@ export function ImpulseGraph({
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
     };
-  }, [windowMs, height, minDb, maxDb]);
+  }, [windowMs, height, minDb, maxDb, logScale, horizontalLines]);
 
   return <canvas ref={canvasRef} style={{ width: "100%", height }} />;
 }
