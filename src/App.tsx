@@ -60,6 +60,7 @@ function App() {
   const [showCalibration, setShowCalibration] = useState(false);
   const displayDbRef = useRef(-90);
   const prevStrokeTimeRef = useRef<number | null>(null);
+  const lastVizUpdateRef = useRef(0);
 
   const metronome = useMetronome({ tempo: 110, subdivision: 1, volume: 0.6 });
   const tempoVal = metronome.config.tempo ?? 110;
@@ -127,18 +128,20 @@ function App() {
     ),
     useCallback(
       (telemetry) => {
+        const nowMs = performance.now();
+        // throttle visualization updates to reduce main-thread churn
+        if (nowMs - lastVizUpdateRef.current < 50) return;
+        lastVizUpdateRef.current = nowMs;
         setThresholdDb(telemetry.thresholdDb);
         displayDbRef.current = 0.85 * displayDbRef.current + 0.15 * telemetry.db;
         setImpulses((prev) => {
-          const now = performance.now();
           const next = [
             ...prev,
-            { t: now, amplitude: displayDbRef.current, thresholdDb: telemetry.thresholdDb }
-          ].filter((p) => p.t >= now - timeWindowMs);
+            { t: nowMs, amplitude: displayDbRef.current, thresholdDb: telemetry.thresholdDb }
+          ].filter((p) => p.t >= nowMs - timeWindowMs);
           return next;
         });
         const prev = prevStrokeTimeRef.current;
-        const nowMs = performance.now();
         if (prev !== null) {
           const delta = nowMs - prev;
           if (delta <= 500) {

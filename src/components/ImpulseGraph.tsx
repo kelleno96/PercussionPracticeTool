@@ -138,7 +138,7 @@ export function ImpulseGraph({
         ctx.setLineDash([]);
       }
 
-      // impulses
+      // impulses (vertical bars)
       filtered.forEach((p) => {
         const x = ((p.t - start) / windowMs) * w;
         ctx.strokeStyle = p.isHit ? "#ffba49" : "rgba(60,207,207,0.8)";
