@@ -163,7 +163,8 @@ export async function listSessions(): Promise<Session[]> {
           endedAt: row.ended_at ? new Date(row.ended_at).getTime() : undefined,
           tempo: row.tempo ?? undefined,
           subdivision: row.subdivision ?? undefined,
-          strokes: (row.strokes ?? []) as StrokeEvent[]
+          strokes: (row.strokes ?? []) as StrokeEvent[],
+          strokeCount: row.stroke_count ?? (row.strokes?.length ?? 0)
         })) ?? []
       );
     }

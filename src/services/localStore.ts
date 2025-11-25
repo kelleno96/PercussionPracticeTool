@@ -64,11 +64,12 @@ export function loadProfile() {
   return read<{ displayName: string; firstName?: string } | null>(PROFILE_KEY, null);
 }
 
-export function appendStroke(sessionId: string, stroke: StrokeEvent) {
+export function appendStroke(sessionId: string, stroke: StrokeEvent, maxBuffer = 300) {
   const sessions = loadSessions();
   const session = sessions.find((s) => s.id === sessionId);
   if (!session) return sessions;
-  session.strokes.push(stroke);
+  session.strokes = [...session.strokes, stroke].slice(-maxBuffer);
+  session.strokeCount = (session.strokeCount ?? session.strokes.length) + 1;
   saveSessions(sessions);
   return sessions;
 }

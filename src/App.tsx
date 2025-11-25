@@ -118,11 +118,19 @@ function App() {
         if (sessionId) {
           const session = sessions.find((s) => s.id === sessionId);
           setSessions((prev) =>
-            prev.map((s) => (s.id === sessionId ? { ...s, strokes: [...s.strokes, stroke] } : s))
+            prev.map((s) =>
+              s.id === sessionId
+                ? {
+                    ...s,
+                    strokes: [...s.strokes, stroke].slice(-300),
+                    strokeCount: (s.strokeCount ?? s.strokes.length) + 1
+                  }
+                : s
+            )
           );
-      appendStrokeEvent(sessionId, { ...stroke, exerciseId }, session?.userId);
-      setLiveCount((c) => c + 1);
-    }
+          appendStrokeEvent(sessionId, { ...stroke, exerciseId }, session?.userId);
+          setLiveCount((c) => c + 1);
+        }
       },
       [exerciseId, timeWindowMs, metronomeAnchorMs, sessions]
     ),
@@ -215,6 +223,7 @@ function App() {
       exerciseName: exercise?.name ?? "General",
       startedAt: Date.now(),
       strokes: [],
+      strokeCount: 0,
       tempo: metronome.config.tempo,
       subdivision: metronome.config.subdivision
     };
@@ -597,7 +606,7 @@ function App() {
                     minute: "2-digit"
                   })}
                   {" · "}
-                  {formatMs((s.endedAt ?? Date.now()) - s.startedAt)} · {s.strokes.length} strokes
+                  {formatMs((s.endedAt ?? Date.now()) - s.startedAt)} · {s.strokeCount ?? s.strokes.length} strokes
                 </p>
               </div>
               <span className="badge">{s.tempo ? `${s.tempo} bpm` : "Session"}</span>
@@ -641,7 +650,7 @@ function App() {
                 thresholdDb: thresholdDb.toFixed(2),
                 config,
                 session: currentSessionId,
-                strokes: currentSession?.strokes.length ?? 0
+                strokes: currentSession?.strokeCount ?? currentSession?.strokes.length ?? 0
               },
               null,
               2

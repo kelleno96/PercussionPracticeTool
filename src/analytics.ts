@@ -10,7 +10,7 @@ const median = (arr: number[]) => {
 
 export function summarizeSessions(sessions: Session[]) {
   const durations = sessions.map((s) => (s.endedAt ?? Date.now()) - s.startedAt);
-  const strokeCounts = sessions.map((s) => s.strokes.length);
+  const strokeCounts = sessions.map((s) => s.strokeCount ?? s.strokes.length);
   const totalDurationMs = durations.reduce((a, b) => a + b, 0);
   const totalStrokes = strokeCounts.reduce((a, b) => a + b, 0);
   return {
@@ -57,7 +57,7 @@ export function aggregateExerciseTotals(sessions: Session[]) {
   const map = new Map<string, { exerciseName: string; strokes: number }>();
   sessions.forEach((s) => {
     const current = map.get(s.exerciseId) ?? { exerciseName: s.exerciseName, strokes: 0 };
-    current.strokes += s.strokes.length;
+    current.strokes += s.strokeCount ?? s.strokes.length;
     map.set(s.exerciseId, current);
   });
   return [...map.entries()].map(([exerciseId, entry]) => ({

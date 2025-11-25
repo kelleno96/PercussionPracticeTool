@@ -17,6 +17,7 @@ export type Session = {
   startedAt: number;
   endedAt?: number;
   strokes: StrokeEvent[];
+  strokeCount: number;
   tempo?: number;
   subdivision?: number;
   createdAt?: string;
