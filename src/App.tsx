@@ -74,7 +74,7 @@ function App() {
     { value: quarterMs / 6, label: "Sextuplet" },
     { value: quarterMs / 8, label: "32nd" }
   ];
-  const timingMin = quarterMs / 10;
+  const timingMin = quarterMs / 12;
   const timingMax = Math.max(600, ...refLines.map((r) => r.value));
 
   useEffect(() => {
