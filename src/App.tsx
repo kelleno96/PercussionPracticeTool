@@ -461,6 +461,8 @@ function App() {
           points={impulses}
           windowMs={timeWindowMs}
           height={220}
+          minDb={-60}
+          maxDb={0}
           metronomeTicks={
             metronome.isRunning && metronomeAnchorMs
               ? {
