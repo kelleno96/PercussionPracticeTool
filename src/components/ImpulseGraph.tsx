@@ -7,6 +7,8 @@ export type ImpulsePoint = {
   thresholdDb?: number;
 };
 
+type LabelPosition = "left" | "right";
+
 type Props = {
   points: ImpulsePoint[];
   windowMs: number;
@@ -20,6 +22,7 @@ type Props = {
   logScale?: boolean;
   horizontalLines?: { value: number; label?: string }[];
   yUnit?: string;
+  labelPosition?: LabelPosition;
 };
 
 export function ImpulseGraph({
@@ -39,10 +42,21 @@ export function ImpulseGraph({
   const ticksRef = useRef(metronomeTicks);
   const minDbRef = useRef(minDb);
   const maxDbRef = useRef(maxDb);
+  const windowMsRef = useRef(windowMs);
+  const logScaleRef = useRef(logScale);
+  const horizontalLinesRef = useRef(horizontalLines);
+  const labelPositionRef = useRef<LabelPosition>(labelPosition);
+  const heightRef = useRef(height);
+  const resizeRef = useRef<(() => void) | null>(null);
   pointsRef.current = points;
   ticksRef.current = metronomeTicks;
   minDbRef.current = minDb;
   maxDbRef.current = maxDb;
+  windowMsRef.current = windowMs;
+  logScaleRef.current = logScale;
+  horizontalLinesRef.current = horizontalLines;
+  labelPositionRef.current = labelPosition;
+  heightRef.current = height;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -53,18 +67,23 @@ export function ImpulseGraph({
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
       canvas.width = canvas.clientWidth * dpr;
-      canvas.height = height * dpr;
-      ctx.scale(dpr, dpr);
+      canvas.height = heightRef.current * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
+    resizeRef.current = resize;
     resize();
     window.addEventListener("resize", resize);
 
+    let running = true;
+    let rafId = 0;
     const render = () => {
+      if (!running) return;
       const w = canvas.clientWidth;
-      const h = height;
+      const h = heightRef.current;
       ctx.clearRect(0, 0, w, h);
       const now = performance.now();
-      const start = now - windowMs;
+      const currentWindowMs = windowMsRef.current;
+      const start = now - currentWindowMs;
 
       // background
       const gradient = ctx.createLinearGradient(0, 0, 0, h);
@@ -83,14 +102,14 @@ export function ImpulseGraph({
         ctx.strokeStyle = "rgba(124,93,255,0.35)";
         ctx.lineWidth = 1.5;
         for (let t = firstTick; t <= now; t += intervalMs) {
-          const x = ((t - start) / windowMs) * w;
+          const x = ((t - start) / currentWindowMs) * w;
           ctx.beginPath();
           ctx.moveTo(x, 0);
           ctx.lineTo(x, h);
           ctx.stroke();
         }
       } else {
-        const seconds = Math.floor(windowMs / 1000);
+        const seconds = Math.floor(currentWindowMs / 1000);
         ctx.strokeStyle = "rgba(255,255,255,0.05)";
         ctx.lineWidth = 1;
         for (let i = 0; i <= seconds; i++) {
@@ -111,7 +130,7 @@ export function ImpulseGraph({
       const rangeLog = logMax - logMin || 1;
       const ampToY = (db: number) => {
         const clamped = Math.min(safeMax, Math.max(safeMin, db));
-        const normalized = logScale
+        const normalized = logScaleRef.current
           ? (Math.log2(Math.max(1e-3, clamped)) - logMin) / rangeLog
           : (clamped - safeMin) / rangeLinear;
         return h - normalized * (h * 0.9);
@@ -140,7 +159,7 @@ export function ImpulseGraph({
 
       // impulses (vertical bars)
       filtered.forEach((p) => {
-        const x = ((p.t - start) / windowMs) * w;
+        const x = ((p.t - start) / currentWindowMs) * w;
         ctx.strokeStyle = p.isHit ? "#ffba49" : "rgba(60,207,207,0.8)";
         ctx.lineWidth = p.isHit ? 3 : 1.5;
         ctx.beginPath();
@@ -156,7 +175,7 @@ export function ImpulseGraph({
       });
 
       // horizontal reference lines
-      horizontalLines.forEach((line) => {
+      horizontalLinesRef.current.forEach((line) => {
         const y = ampToY(line.value);
         ctx.strokeStyle = "rgba(255,255,255,0.1)";
         ctx.setLineDash([4, 4]);
@@ -169,19 +188,24 @@ export function ImpulseGraph({
           ctx.fillStyle = "rgba(255,255,255,0.6)";
           ctx.font = "11px sans-serif";
           ctx.textBaseline = "middle";
-          const xPos = labelPosition === "left" ? 8 : w - 140;
+          const xPos = labelPositionRef.current === "left" ? 8 : w - 140;
           ctx.fillText(line.label, xPos, y);
         }
       });
 
-      requestAnimationFrame(render);
+      rafId = requestAnimationFrame(render);
     };
-    const raf = requestAnimationFrame(render);
+    rafId = requestAnimationFrame(render);
     return () => {
-      cancelAnimationFrame(raf);
+      running = false;
+      if (rafId) cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [windowMs, height, minDb, maxDb, logScale, horizontalLines]);
+  }, []);
+
+  useEffect(() => {
+    resizeRef.current?.();
+  }, [height]);
 
   return <canvas ref={canvasRef} style={{ width: "100%", height }} />;
 }
