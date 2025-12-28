@@ -25,22 +25,18 @@ class StrokeProcessor extends AudioWorkletProcessor {
     const input = inputs[0];
     if (!input || input.length === 0) return true;
 
-    // mix to mono
+    // use a single channel to avoid phase artifacts from mixing
+    const data = input[0];
+    if (!data || data.length === 0) return true;
     let frameEnergy = 0;
-    let count = 0;
     let peakAbs = 0;
-    for (let channel = 0; channel < input.length; channel++) {
-      const data = input[channel];
-      for (let i = 0; i < data.length; i++) {
-        const sample = data[i];
-        frameEnergy += sample * sample;
-        count++;
-        const abs = Math.abs(sample);
-        if (abs > peakAbs) peakAbs = abs;
-      }
+    for (let i = 0; i < data.length; i++) {
+      const sample = data[i];
+      frameEnergy += sample * sample;
+      const abs = Math.abs(sample);
+      if (abs > peakAbs) peakAbs = abs;
     }
-    if (count === 0) return true;
-    const rms = Math.sqrt(frameEnergy / count);
+    const rms = Math.sqrt(frameEnergy / data.length);
     const db = 20 * Math.log10(rms + 1e-9);
     const peakDb = 20 * Math.log10(peakAbs + 1e-9);
 
