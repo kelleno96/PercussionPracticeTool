@@ -107,7 +107,7 @@ function App() {
         const nowMs = performance.now();
         if (prev !== null) {
           const delta = nowMs - prev;
-          if (delta <= 500) {
+          if (delta <= timingMax) {
             setTimingPoints((prevPoints) => {
               const next = [
                 ...prevPoints,
@@ -135,7 +135,7 @@ function App() {
           setLiveCount((c) => c + 1);
         }
       },
-      [exerciseId, timeWindowMs, metronomeAnchorMs, sessions]
+      [exerciseId, timeWindowMs, metronomeAnchorMs, sessions, timingMax]
     ),
     useCallback(
       (telemetry) => {
@@ -155,7 +155,7 @@ function App() {
         const prev = prevStrokeTimeRef.current;
         if (prev !== null) {
           const delta = nowMs - prev;
-          if (delta <= 500) {
+          if (delta <= timingMax) {
             setTimingPoints((prevPoints) => {
               const next = [
                 ...prevPoints,
@@ -166,7 +166,7 @@ function App() {
           }
         }
       },
-      [timeWindowMs]
+      [timeWindowMs, timingMax]
     ),
     useCallback((measure) => {
       const id = measure.runId ? `${measure.runId}:${measure.seq}` : String(measure.seq);
