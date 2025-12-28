@@ -33,8 +33,18 @@ export function useStrokeDetector(
   const ctxRef = useRef<AudioContext | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const scriptNodeRef = useRef<ScriptProcessorNode | null>(null);
+  const onStrokeRef = useRef(onStroke);
+  const onTelemetryRef = useRef(onTelemetry);
   const floorRef = useRef(0);
   const lastHitRef = useRef(0);
+
+  useEffect(() => {
+    onStrokeRef.current = onStroke;
+  }, [onStroke]);
+
+  useEffect(() => {
+    onTelemetryRef.current = onTelemetry;
+  }, [onTelemetry]);
 
   const stop = useCallback(() => {
     setIsRunning(false);
@@ -101,11 +111,11 @@ export function useStrokeDetector(
                 floorDb: data.floorDb
               };
               lastHitRef.current = at;
-              onStroke(stroke);
+              onStrokeRef.current(stroke);
               setLevelDb(data.db);
             } else if (data.type === "telemetry") {
               setLevelDb(data.db);
-              onTelemetry?.(data);
+              onTelemetryRef.current?.(data);
             }
           };
           node.port.postMessage({ type: "config", ...merged });
@@ -149,10 +159,10 @@ export function useStrokeDetector(
                 thresholdDb,
                 floorDb
               };
-              onStroke(stroke);
+              onStrokeRef.current(stroke);
             }
             setLevelDb(db);
-            onTelemetry?.({ db, thresholdDb, floorDb });
+            onTelemetryRef.current?.({ db, thresholdDb, floorDb });
           };
           source.connect(processor);
           processor.connect(silent).connect(ctx.destination);
@@ -166,7 +176,7 @@ export function useStrokeDetector(
         setStatus("error");
       }
     },
-    [config, isRunning, onStroke, onTelemetry]
+    [config, isRunning]
   );
 
   return {
