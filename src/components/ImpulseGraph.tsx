@@ -26,6 +26,7 @@ type Props = {
   labelPosition?: LabelPosition;
   showYAxisLabels?: boolean;
   yAxisLabels?: { min?: string; max?: string };
+  showThresholdLine?: boolean;
 };
 
 export function ImpulseGraph({
@@ -40,7 +41,8 @@ export function ImpulseGraph({
   yUnit = "",
   labelPosition = "right",
   showYAxisLabels = true,
-  yAxisLabels
+  yAxisLabels,
+  showThresholdLine = true
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointsRef = useRef(points);
@@ -53,6 +55,7 @@ export function ImpulseGraph({
   const labelPositionRef = useRef<LabelPosition>(labelPosition);
   const showYAxisLabelsRef = useRef(showYAxisLabels);
   const yAxisLabelsRef = useRef(yAxisLabels);
+  const showThresholdLineRef = useRef(showThresholdLine);
   const heightRef = useRef(height);
   const resizeRef = useRef<(() => void) | null>(null);
   pointsRef.current = points;
@@ -65,6 +68,7 @@ export function ImpulseGraph({
   labelPositionRef.current = labelPosition;
   showYAxisLabelsRef.current = showYAxisLabels;
   yAxisLabelsRef.current = yAxisLabels;
+  showThresholdLineRef.current = showThresholdLine;
   heightRef.current = height;
 
   useEffect(() => {
@@ -160,7 +164,7 @@ export function ImpulseGraph({
 
       // threshold line (from last point)
       const last = filtered[filtered.length - 1];
-      if (last?.thresholdDb !== undefined) {
+      if (showThresholdLineRef.current && last?.thresholdDb !== undefined) {
         ctx.strokeStyle = "rgba(255,186,73,0.6)";
         ctx.setLineDash([6, 6]);
         const y = ampToY(last.thresholdDb);

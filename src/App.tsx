@@ -466,6 +466,7 @@ function App() {
           minDb={-60}
           maxDb={0}
           yAxisLabels={{ min: "Soft", max: "Loud" }}
+          showThresholdLine={false}
           metronomeTicks={
             metronome.isRunning && metronomeAnchorMs
               ? {
