@@ -24,6 +24,8 @@ type Props = {
   horizontalLines?: { value: number; label?: string }[];
   yUnit?: string;
   labelPosition?: LabelPosition;
+  showYAxisLabels?: boolean;
+  yAxisLabels?: { min?: string; max?: string };
 };
 
 export function ImpulseGraph({
@@ -36,7 +38,9 @@ export function ImpulseGraph({
   logScale = false,
   horizontalLines = [],
   yUnit = "",
-  labelPosition = "right"
+  labelPosition = "right",
+  showYAxisLabels = true,
+  yAxisLabels
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointsRef = useRef(points);
@@ -47,6 +51,8 @@ export function ImpulseGraph({
   const logScaleRef = useRef(logScale);
   const horizontalLinesRef = useRef(horizontalLines);
   const labelPositionRef = useRef<LabelPosition>(labelPosition);
+  const showYAxisLabelsRef = useRef(showYAxisLabels);
+  const yAxisLabelsRef = useRef(yAxisLabels);
   const heightRef = useRef(height);
   const resizeRef = useRef<(() => void) | null>(null);
   pointsRef.current = points;
@@ -57,6 +63,8 @@ export function ImpulseGraph({
   logScaleRef.current = logScale;
   horizontalLinesRef.current = horizontalLines;
   labelPositionRef.current = labelPosition;
+  showYAxisLabelsRef.current = showYAxisLabels;
+  yAxisLabelsRef.current = yAxisLabels;
   heightRef.current = height;
 
   useEffect(() => {
@@ -137,13 +145,18 @@ export function ImpulseGraph({
         return h - normalized * (h * 0.9);
       };
 
-      // Y-axis labels
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
-      ctx.font = "12px sans-serif";
-      ctx.textBaseline = "top";
-      ctx.fillText(`${safeMax.toFixed(0)}${yUnit}`, 8, 8);
-      ctx.textBaseline = "bottom";
-      ctx.fillText(`${safeMin.toFixed(0)}${yUnit}`, 8, h - 8);
+      if (showYAxisLabelsRef.current) {
+        const axisLabels = yAxisLabelsRef.current;
+        const maxLabel = axisLabels?.max ?? `${safeMax.toFixed(0)}${yUnit}`;
+        const minLabel = axisLabels?.min ?? `${safeMin.toFixed(0)}${yUnit}`;
+        // Y-axis labels
+        ctx.fillStyle = "rgba(255,255,255,0.6)";
+        ctx.font = "12px sans-serif";
+        ctx.textBaseline = "top";
+        ctx.fillText(maxLabel, 8, 8);
+        ctx.textBaseline = "bottom";
+        ctx.fillText(minLabel, 8, h - 8);
+      }
 
       // threshold line (from last point)
       const last = filtered[filtered.length - 1];

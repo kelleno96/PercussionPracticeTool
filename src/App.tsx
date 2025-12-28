@@ -299,7 +299,7 @@ function App() {
         <div>
           <h1>Stroke Counter</h1>
           <p className="subtitle">
-            Real-time drum stroke detection, metronome, analytics, and leaderboards.
+            Real-time drum stroke detection and analytics practice tool.
           </p>
         </div>
         <div className="controls-row">
@@ -364,7 +364,7 @@ function App() {
             </div>
             <div className="controls-row">
               <label>
-                Sensitivity
+                Sensitivity (raise = less sensitive)
                 <input
                   type="range"
                   min="1"
@@ -374,6 +374,7 @@ function App() {
                   onChange={(e) => updateConfig({ sensitivity: Number(e.target.value) })}
                 />
                 <div className="slider-value">x{config.sensitivity.toFixed(1)}</div>
+                <div className="slider-value">Raise until room noise stops triggering hits.</div>
               </label>
               <label>
                 Debounce (ms)
@@ -386,6 +387,7 @@ function App() {
                   onChange={(e) => updateConfig({ debounceMs: Number(e.target.value) })}
                 />
                 <div className="slider-value">{config.debounceMs} ms</div>
+                <div className="slider-value">Increase until double counts stop.</div>
               </label>
               <label>
                 Window (s)
@@ -463,6 +465,7 @@ function App() {
           height={220}
           minDb={-60}
           maxDb={0}
+          yAxisLabels={{ min: "Soft", max: "Loud" }}
           metronomeTicks={
             metronome.isRunning && metronomeAnchorMs
               ? {
