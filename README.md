@@ -1,12 +1,13 @@
 # Stroke Counter (browser-based)
 
-Real-time percussion practice web app for mobile and desktop: microphone stroke detection, sample-accurate metronome, exercise tracking, analytics, and leaderboards. Built with Vite + React + TypeScript and Supabase (optional) for auth, storage, and leaderboards. Works offline with localStorage fallback.
+Real-time percussion practice web app for mobile and desktop: microphone stroke detection, sample-accurate metronome, exercise tracking, and analytics. Built with Vite + React + TypeScript. Works offline with localStorage persistence.
 
 ## Stack & rationale
 - React + Vite: fast dev/build, good mobile performance.
 - Web Audio API: AudioWorklet stroke detection (ScriptProcessor fallback) and metronome with ahead-of-time scheduling.
-- Supabase: Google/Apple OAuth, Postgres, RLS, serverless functions if needed; localStorage fallback keeps the app usable without auth.
-- Lightweight d3 helpers for simple charting, date-fns for time math.
+- Canvas: custom impulse/timing visualizations.
+- Supabase scaffolding (currently disabled in code) for optional auth + storage.
+- date-fns for time math.
 
 ## Project layout
 ```
@@ -45,34 +46,28 @@ Environment variables (create `.env.local`):
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_PUBLIC_ANON_KEY
 ```
-Without these, the app runs fully client-side with local persistence.
+Remote backend is currently disabled in `src/services/supabaseClient.ts`. Without changes there, the app runs fully client-side with local persistence.
 
 ## Deployment
-1. Supabase: create project, run `docs/schema.sql` in SQL editor, enable Google + Apple providers, set redirect URLs to your domain, and enable RLS.
-2. Vercel/Netlify: set env vars above, run `npm run build`, deploy `dist/`.
-3. Add `https` only, set CSP to restrict microphone access to your origin, and serve over TLS (required for mic).
+1. Vercel/Netlify: run `npm run build`, deploy `dist/`.
+2. Add `https` only, set CSP to restrict microphone access to your origin, and serve over TLS (required for mic).
+3. Optional: re-enable Supabase in `src/services/supabaseClient.ts`, set env vars above, and apply `docs/schema.sql`.
 
 ## Stroke detection algorithm
-- AudioWorklet mixes mic channels to mono, computes RMS per frame, tracks an exponential moving average (noise floor), and triggers when `rms > floor * sensitivity` and `dB` exceeds `floorDb + sensitivity*6dB` with debounce.
-- Configurable params: `sensitivity`, `debounceMs`, `minDb`, `alpha` (floor smoothing).
+- AudioWorklet uses a single input channel, computes RMS per frame, tracks an exponential moving average (noise floor), and triggers when `rms > floor * sensitivity` and `dB` exceeds `floorDb + sensitivity*6dB` with debounce.
+- Configurable params: `sensitivity`, `debounceMs`, `minDb`, `alpha` (floor smoothing), `measureWindowMs` (post-hit loudness window).
 - Fallback ScriptProcessor mirrors the same logic if AudioWorklets are unavailable (older iOS).
 - UI shows live dB level and threshold; graph window uses fixed time width to avoid X-axis stretching.
 
-## Data model (Supabase)
-- `profiles`: user metadata (display name, safe username).
-- `exercises`: per-user or global exercises.
-- `sessions`: practice sessions with tempo/subdivision metadata.
-- `strokes`: individual stroke events (time, dB, rms, thresholds).
-- `leaderboard_cache`: materialized/paginated leaderboards (lifetime, weekly, streaks, per-exercise).
-See `docs/schema.sql` for full DDL + indexes and RLS hints.
+## Data model (optional Supabase, currently disabled)
+See `docs/schema.sql` for the tables and RLS hints used by the optional backend.
 
 ## Key features
 - Mobile-first UI with large controls, dark/light themes.
 - Sample-accurate metronome running concurrently with stroke detection.
-- Real-time impulse graph (60 fps) with stroke markers and fixed time window.
-- Exercise-specific tracking, lifetime analytics, weekly trends, streaks, peak SPM.
-- Leaderboard scaffolding with public-safe display names.
-- Toggleable debug panel for audio telemetry.
+- Real-time impulse graph and timing consistency graph with fixed time window.
+- Exercise-specific session tracking, lifetime analytics, weekly trends, streaks, peak SPM.
+- AV calibration slider and audio telemetry debug panel.
 
 ## Future improvements
 1) Add offline-to-online sync queues for strokes/sessions.  

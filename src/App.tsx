@@ -23,6 +23,29 @@ const formatMs = (ms: number) => {
 
 const formatNumber = (n: number) => n.toLocaleString();
 
+type PlaybackStroke = {
+  id: string;
+  t: number;
+  db: number;
+};
+
+const clampDb = (db: number, min = -60, max = 0) => Math.min(max, Math.max(min, db));
+
+const schedulePlaybackClick = (ctx: AudioContext, time: number, db: number) => {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const clamped = clampDb(db);
+  const linear = Math.pow(10, clamped / 20);
+  const targetGain = Math.min(1, Math.max(0.05, linear));
+  osc.frequency.value = 950;
+  gain.gain.setValueAtTime(0.0001, time);
+  gain.gain.exponentialRampToValueAtTime(targetGain, time + 0.004);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.08);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(time);
+  osc.stop(time + 0.1);
+};
+
 const readCookie = (name: string) => {
   if (typeof document === "undefined") return null;
   const match = document.cookie.split("; ").find((row) => row.startsWith(`${name}=`));
@@ -50,6 +73,9 @@ function App() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [thresholdDb, setThresholdDb] = useState(-40);
   const [liveCount, setLiveCount] = useState(0);
+  const [playbackStrokes, setPlaybackStrokes] = useState<PlaybackStroke[]>([]);
+  const [isPlaybackRecording, setIsPlaybackRecording] = useState(false);
+  const [isPlayingBack, setIsPlayingBack] = useState(false);
   const currentSessionRef = useRef<string | null>(null);
   const autoStartedMicRef = useRef(false);
   const [metronomeAnchorMs, setMetronomeAnchorMs] = useState<number | null>(null);
@@ -61,6 +87,11 @@ function App() {
   const displayDbRef = useRef(-90);
   const prevStrokeTimeRef = useRef<number | null>(null);
   const lastVizUpdateRef = useRef(0);
+  const playbackRecordingRef = useRef(false);
+  const playbackStartRef = useRef<number | null>(null);
+  const playbackStrokesRef = useRef<PlaybackStroke[]>([]);
+  const playbackCtxRef = useRef<AudioContext | null>(null);
+  const playbackTimeoutRef = useRef<number | null>(null);
 
   const metronome = useMetronome({ tempo: 110, subdivision: 1, volume: 0.6 });
   const tempoVal = metronome.config.tempo ?? 110;
@@ -81,13 +112,71 @@ function App() {
     currentSessionRef.current = currentSessionId;
   }, [currentSessionId]);
 
+  useEffect(() => {
+    playbackRecordingRef.current = isPlaybackRecording;
+  }, [isPlaybackRecording]);
+
+  useEffect(() => {
+    playbackStrokesRef.current = playbackStrokes;
+  }, [playbackStrokes]);
+
+  const clearPlayback = useCallback(() => {
+    setPlaybackStrokes([]);
+    playbackStartRef.current = null;
+  }, []);
+
+  const stopPlayback = useCallback(() => {
+    if (playbackTimeoutRef.current) {
+      window.clearTimeout(playbackTimeoutRef.current);
+      playbackTimeoutRef.current = null;
+    }
+    if (playbackCtxRef.current) {
+      playbackCtxRef.current.close();
+      playbackCtxRef.current = null;
+    }
+    setIsPlayingBack(false);
+  }, []);
+
+  const startPlaybackRecording = useCallback(() => {
+    stopPlayback();
+    clearPlayback();
+    playbackStartRef.current = performance.now();
+    setIsPlaybackRecording(true);
+  }, [clearPlayback, stopPlayback]);
+
+  const stopPlaybackRecording = useCallback(() => {
+    setIsPlaybackRecording(false);
+  }, []);
+
+  const playRecording = useCallback(async () => {
+    if (isPlayingBack) return;
+    const strokes = playbackStrokesRef.current;
+    if (!strokes.length) return;
+    stopPlayback();
+    setIsPlayingBack(true);
+    const ctx = new AudioContext({ latencyHint: "interactive" });
+    playbackCtxRef.current = ctx;
+    await ctx.resume();
+    const startAt = ctx.currentTime + 0.12;
+    let lastTime = startAt;
+    strokes.forEach((stroke) => {
+      const when = startAt + stroke.t / 1000;
+      if (when > lastTime) lastTime = when;
+      schedulePlaybackClick(ctx, when, stroke.db);
+    });
+    const tailMs = 200;
+    playbackTimeoutRef.current = window.setTimeout(() => {
+      stopPlayback();
+    }, (lastTime - startAt) * 1000 + tailMs);
+  }, [isPlayingBack, stopPlayback]);
+
   const { isRunning, status, levelDb, config, start, stop, updateConfig } = useStrokeDetector(
     useCallback(
       (stroke: StrokeEvent) => {
+        const now = performance.now();
         const sessionId = currentSessionRef.current;
         setThresholdDb(stroke.thresholdDb);
         setImpulses((prev) => {
-          const now = performance.now();
           const impulseId =
             stroke.runId && stroke.seq !== undefined ? `${stroke.runId}:${stroke.seq}` : stroke.id;
           const next = [
@@ -102,9 +191,22 @@ function App() {
           ].filter((p) => p.t >= now - timeWindowMs);
           return next;
         });
+        if (playbackRecordingRef.current && playbackStartRef.current !== null) {
+          const impulseId =
+            stroke.runId && stroke.seq !== undefined ? `${stroke.runId}:${stroke.seq}` : stroke.id;
+          const offset = now - playbackStartRef.current;
+          setPlaybackStrokes((prev) => [
+            ...prev,
+            {
+              id: impulseId,
+              t: offset,
+              db: stroke.db
+            }
+          ]);
+        }
         // timing graph (inter-onset interval)
         const prev = prevStrokeTimeRef.current;
-        const nowMs = performance.now();
+        const nowMs = now;
         if (prev !== null) {
           const delta = nowMs - prev;
           if (delta <= timingMax) {
@@ -181,6 +283,17 @@ function App() {
         });
         return changed ? next : prev;
       });
+      setPlaybackStrokes((prev) => {
+        let changed = false;
+        const next = prev.map((stroke) => {
+          if (stroke.id === id) {
+            changed = true;
+            return { ...stroke, db: measure.db };
+          }
+          return stroke;
+        });
+        return changed ? next : prev;
+      });
     }, [])
   );
 
@@ -219,6 +332,10 @@ function App() {
   const weekly = useMemo(() => weeklyTotals(sessions), [sessions]);
   const exerciseTotals = useMemo(() => aggregateExerciseTotals(sessions), [sessions]);
   const period = useMemo(() => strokesByPeriod(sessions, 30), [sessions]);
+  const playbackDurationMs = useMemo(
+    () => playbackStrokes.reduce((max, stroke) => Math.max(max, stroke.t), 0),
+    [playbackStrokes]
+  );
 
   const clearStats = () => {
     const ok = window.confirm("Reset all local sessions and stroke counts? This cannot be undone.");
@@ -272,6 +389,8 @@ function App() {
       await start();
     }
   };
+
+  useEffect(() => () => stopPlayback(), [stopPlayback]);
 
   const onAddExercise = () => {
     const name = prompt("Exercise name");
@@ -500,6 +619,42 @@ function App() {
           }
         />
         <p className="subtitle">Shows ms since previous stroke; ignores gaps over 500 ms.</p>
+      </div>
+
+      <div className="panel">
+        <h2>Playback practice</h2>
+        <p className="subtitle">
+          Record timing + loudness, then replay as clicks to hear consistency. No audio is stored.
+        </p>
+        <div className="controls-row">
+          <button onClick={isPlaybackRecording ? stopPlaybackRecording : startPlaybackRecording}>
+            {isPlaybackRecording ? "Stop recording" : "Record timing + loudness"}
+          </button>
+          <button
+            onClick={playRecording}
+            disabled={!playbackStrokes.length || isPlaybackRecording || isPlayingBack}
+          >
+            {isPlayingBack ? "Playing..." : "Play recording"}
+          </button>
+          <button onClick={stopPlayback} disabled={!isPlayingBack}>
+            Stop playback
+          </button>
+          <button
+            className="theme-toggle"
+            onClick={clearPlayback}
+            disabled={!playbackStrokes.length && !isPlaybackRecording}
+          >
+            Clear
+          </button>
+          <span className="badge">{playbackStrokes.length} hits</span>
+          <span className="badge">{formatMs(playbackDurationMs)}</span>
+          {isPlaybackRecording && (
+            <span className="recording-pill" aria-live="polite">
+              <span className="pulse" aria-hidden="true" />
+              Recording
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="grid">
