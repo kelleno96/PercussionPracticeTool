@@ -626,6 +626,9 @@ function App() {
         <p className="subtitle">
           Record timing + loudness, then replay as clicks to hear consistency. No audio is stored.
         </p>
+        <p className="subtitle">
+          Playback reflects what the detector thought it heard, not necessarily the exact performance.
+        </p>
         <div className="controls-row">
           <button onClick={isPlaybackRecording ? stopPlaybackRecording : startPlaybackRecording}>
             {isPlaybackRecording ? "Stop recording" : "Record timing + loudness"}
