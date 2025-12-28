@@ -88,11 +88,14 @@ function App() {
         setThresholdDb(stroke.thresholdDb);
         setImpulses((prev) => {
           const now = performance.now();
+          const impulseId =
+            stroke.runId && stroke.seq !== undefined ? `${stroke.runId}:${stroke.seq}` : stroke.id;
           const next = [
             ...prev,
             {
+              id: impulseId,
               t: now,
-              amplitude: stroke.peakDb ?? stroke.db,
+              amplitude: stroke.db,
               isHit: true,
               thresholdDb: stroke.thresholdDb
             }
@@ -164,7 +167,21 @@ function App() {
         }
       },
       [timeWindowMs]
-    )
+    ),
+    useCallback((measure) => {
+      const id = measure.runId ? `${measure.runId}:${measure.seq}` : String(measure.seq);
+      setImpulses((prev) => {
+        let changed = false;
+        const next = prev.map((p) => {
+          if (p.id === id) {
+            changed = true;
+            return { ...p, amplitude: measure.db };
+          }
+          return p;
+        });
+        return changed ? next : prev;
+      });
+    }, [])
   );
 
   useEffect(() => {

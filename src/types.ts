@@ -1,5 +1,7 @@
 export type StrokeEvent = {
   id: string;
+  seq?: number;
+  runId?: string;
   at: number; // epoch ms
   db: number;
   peakDb?: number;

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
 export type ImpulsePoint = {
+  id?: string;
   t: number;
   amplitude: number; // dB
   isHit?: boolean;

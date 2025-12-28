@@ -6,13 +6,15 @@ export type DetectorConfig = {
   debounceMs: number;
   minDb: number;
   alpha: number;
+  measureWindowMs: number;
 };
 
 export const defaultConfig: DetectorConfig = {
   sensitivity: 1.3,
   debounceMs: 15,
   minDb: -60,
-  alpha: 0.1
+  alpha: 0.1,
+  measureWindowMs: 30
 };
 
 type Telemetry = {
@@ -21,9 +23,18 @@ type Telemetry = {
   floorDb: number;
 };
 
+type StrokeMeasure = {
+  seq: number;
+  runId?: string;
+  rms: number;
+  db: number;
+  peakDb: number;
+};
+
 export function useStrokeDetector(
   onStroke: (stroke: StrokeEvent) => void,
-  onTelemetry?: (telemetry: Telemetry) => void
+  onTelemetry?: (telemetry: Telemetry) => void,
+  onStrokeMeasure?: (measure: StrokeMeasure) => void
 ) {
   const [isRunning, setIsRunning] = useState(false);
   const [levelDb, setLevelDb] = useState(-120);
@@ -35,6 +46,9 @@ export function useStrokeDetector(
   const scriptNodeRef = useRef<ScriptProcessorNode | null>(null);
   const onStrokeRef = useRef(onStroke);
   const onTelemetryRef = useRef(onTelemetry);
+  const onStrokeMeasureRef = useRef(onStrokeMeasure);
+  const runIdRef = useRef<string | null>(null);
+  const seqRef = useRef(0);
   const floorRef = useRef(0);
   const lastHitRef = useRef(0);
 
@@ -45,6 +59,10 @@ export function useStrokeDetector(
   useEffect(() => {
     onTelemetryRef.current = onTelemetry;
   }, [onTelemetry]);
+
+  useEffect(() => {
+    onStrokeMeasureRef.current = onStrokeMeasure;
+  }, [onStrokeMeasure]);
 
   const stop = useCallback(() => {
     setIsRunning(false);
@@ -71,6 +89,9 @@ export function useStrokeDetector(
     async (customConfig?: Partial<DetectorConfig>) => {
       if (isRunning) return;
       const merged = { ...config, ...customConfig };
+      runIdRef.current = crypto.randomUUID();
+      seqRef.current = 0;
+      const runId = runIdRef.current;
       setConfig(merged);
       setStatus("permission");
       try {
@@ -101,8 +122,12 @@ export function useStrokeDetector(
             const data = event.data;
             if (data.type === "stroke") {
               const at = performance.now();
+              const seq = typeof data.seq === "number" ? data.seq : undefined;
+              const strokeRunId = data.runId ?? runIdRef.current ?? undefined;
               const stroke: StrokeEvent = {
                 id: crypto.randomUUID(),
+                seq,
+                runId: strokeRunId,
                 at,
                 db: data.db,
                 peakDb: data.peakDb ?? data.db,
@@ -116,9 +141,19 @@ export function useStrokeDetector(
             } else if (data.type === "telemetry") {
               setLevelDb(data.db);
               onTelemetryRef.current?.(data);
+            } else if (data.type === "stroke-measure") {
+              if (typeof data.seq === "number") {
+                onStrokeMeasureRef.current?.({
+                  seq: data.seq,
+                  runId: data.runId ?? runIdRef.current ?? undefined,
+                  rms: data.rms,
+                  db: data.db,
+                  peakDb: data.peakDb
+                });
+              }
             }
           };
-          node.port.postMessage({ type: "config", ...merged });
+          node.port.postMessage({ type: "config", ...merged, runId });
           source.connect(node);
           node.connect(silent).connect(ctx.destination);
           workletNodeRef.current = node;
@@ -131,6 +166,46 @@ export function useStrokeDetector(
           const processor = ctx.createScriptProcessor(1024, 1, 1);
           const silent = ctx.createGain();
           silent.gain.value = 0;
+          const measureWindowFrames = Math.max(
+            1,
+            Math.round((ctx.sampleRate * merged.measureWindowMs) / 1000)
+          );
+          let pendingMeasure:
+            | null
+            | {
+                seq: number;
+                remaining: number;
+                sumSquares: number;
+                peakAbs: number;
+                count: number;
+              } = null;
+          const accumulateMeasure = (input: Float32Array) => {
+            if (!pendingMeasure) return;
+            const toProcess = Math.min(pendingMeasure.remaining, input.length);
+            for (let i = 0; i < toProcess; i++) {
+              const sample = input[i];
+              pendingMeasure.sumSquares += sample * sample;
+              pendingMeasure.count++;
+              const abs = Math.abs(sample);
+              if (abs > pendingMeasure.peakAbs) pendingMeasure.peakAbs = abs;
+            }
+            pendingMeasure.remaining -= toProcess;
+            if (pendingMeasure.remaining <= 0) {
+              const rmsWindow = Math.sqrt(
+                pendingMeasure.sumSquares / Math.max(1, pendingMeasure.count)
+              );
+              const dbWindow = 20 * Math.log10(rmsWindow + 1e-9);
+              const peakDbWindow = 20 * Math.log10(pendingMeasure.peakAbs + 1e-9);
+              onStrokeMeasureRef.current?.({
+                seq: pendingMeasure.seq,
+                runId: runId ?? undefined,
+                rms: rmsWindow,
+                db: dbWindow,
+                peakDb: peakDbWindow
+              });
+              pendingMeasure = null;
+            }
+          };
           processor.onaudioprocess = (event) => {
             const input = event.inputBuffer.getChannelData(0);
             let energy = 0;
@@ -150,8 +225,11 @@ export function useStrokeDetector(
             const now = performance.now();
             if (db > thresholdDb && now - lastHitRef.current > merged.debounceMs) {
               lastHitRef.current = now;
+              const seq = ++seqRef.current;
               const stroke: StrokeEvent = {
                 id: crypto.randomUUID(),
+                seq,
+                runId: runId ?? undefined,
                 at: now,
                 db,
                 peakDb,
@@ -160,6 +238,16 @@ export function useStrokeDetector(
                 floorDb
               };
               onStrokeRef.current(stroke);
+              pendingMeasure = {
+                seq,
+                remaining: measureWindowFrames,
+                sumSquares: 0,
+                peakAbs: 0,
+                count: 0
+              };
+              accumulateMeasure(input);
+            } else {
+              accumulateMeasure(input);
             }
             setLevelDb(db);
             onTelemetryRef.current?.({ db, thresholdDb, floorDb });
